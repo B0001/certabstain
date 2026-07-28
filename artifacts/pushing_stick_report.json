@@ -1,0 +1,47 @@
+{
+  "milestone": "M6",
+  "mode": "stick",
+  "reference_id": "PusherSlider(a=0.05, c=0.03, mu=0.3, dt=0.01, py_max=0.04)",
+  "domain": {
+    "variables": [
+      "py",
+      "vpx",
+      "vpy"
+    ],
+    "lo": [
+      -0.008,
+      0.05,
+      -0.05
+    ],
+    "hi": [
+      0.008,
+      0.15,
+      0.05
+    ]
+  },
+  "nominal_region": {
+    "lo": [
+      -0.003,
+      0.07,
+      -0.03
+    ],
+    "hi": [
+      0.003,
+      0.13,
+      0.03
+    ]
+  },
+  "eps": 0.001000852008067238,
+  "empirical_floor": 0.0004090540733057285,
+  "eps_over_floor": 2.4467474433855534,
+  "cover_fraction": 0.9978324342519045,
+  "n_leaves": 126368,
+  "n_leaf_evals": 201120,
+  "alpha": 0.05,
+  "abstention_rate": 0.0016,
+  "twice_alpha": 0.1,
+  "verdict": {
+    "meets_M6_bar": true,
+    "reason": "nominal abstention rate 0.0016 <= 2*alpha=0.1, with certified eps=0.001001 (cover 99.8%)"
+  }
+}
