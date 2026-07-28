@@ -1,0 +1,327 @@
+{
+  "model": "SpringDamper2D (y, vy) subsystem",
+  "K_MAX": 10,
+  "clearance_band": 0.15,
+  "rows": [
+    {
+      "k": 10.0,
+      "y_eq": -0.9810000000000001,
+      "eps": [
+        0.036260591251732095,
+        0.028766580359851416
+      ],
+      "empirical_floor": [
+        1.7774670624248756e-13,
+        8.479328350574633e-13
+      ],
+      "cover_fraction": 1.0,
+      "requested_horizon": 10,
+      "achieved_horizon": 7,
+      "cover_exit_reason": "state x U_7 left the certified cover before step 7; certified horizon stops at 7",
+      "y_widths": [
+        0.11771999999999994,
+        0.19027964530340802,
+        0.26289633186743977,
+        0.3355701997935998,
+        0.40830138833998175,
+        0.48109003593108224,
+        0.5539362801675114,
+        0.6268402578355958
+      ],
+      "vy_widths": [
+        0.04,
+        0.09835036072001153,
+        0.15684281428605104,
+        0.21547651018226466,
+        0.27425060779897203,
+        0.33316427632517076,
+        0.39221669464221315,
+        0.45140705121864416
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 28.48035868435802,
+      "y_eq": -0.34444790912650436,
+      "eps": [
+        0.02075506552149051,
+        0.02117496798020835
+      ],
+      "empirical_floor": [
+        0.004814857881502488,
+        0.0021586002109795777
+      ],
+      "cover_fraction": 0.9999999999999999,
+      "requested_horizon": 10,
+      "achieved_horizon": 4,
+      "cover_exit_reason": "state x U_4 left the certified cover before step 4; certified horizon stops at 4",
+      "y_widths": [
+        0.041333749095180505,
+        0.08288352893939949,
+        0.12447538756800436,
+        0.16611006961738828,
+        0.2077883134464225
+      ],
+      "vy_widths": [
+        0.04,
+        0.08316759634208272,
+        0.12708719060825274,
+        0.17175246209952924,
+        0.21715717453182104
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 81.11308307896873,
+      "y_eq": -0.12094226513926666,
+      "eps": [
+        0.015133077214020492,
+        0.019997247406902317
+      ],
+      "empirical_floor": [
+        0.006273546736385763,
+        0.004212677404759446
+      ],
+      "cover_fraction": 1.0,
+      "requested_horizon": 10,
+      "achieved_horizon": 2,
+      "cover_exit_reason": "state x U_2 left the certified cover before step 2; certified horizon stops at 2",
+      "y_widths": [
+        0.014513071816711992,
+        0.04481904816828773,
+        0.07516386185800665
+      ],
+      "vy_widths": [
+        0.04,
+        0.08081141920945886,
+        0.12367287761408567
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 231.0129700083158,
+      "y_eq": -0.04246514816742484,
+      "eps": [
+        0.010352333786055068,
+        0.019808183636108454
+      ],
+      "empirical_floor": [
+        0.005734510878218656,
+        0.0018485007519974395
+      ],
+      "cover_fraction": 0.9999999999999999,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.00509581778009098,
+        0.025839191370415373
+      ],
+      "vy_widths": [
+        0.04,
+        0.08043471276352067
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 657.9332246575682,
+      "y_eq": -0.014910327723768275,
+      "eps": [
+        0.008986982262911539,
+        0.020283550470425783
+      ],
+      "empirical_floor": [
+        0.005250821879447061,
+        0.0034102613710849106
+      ],
+      "cover_fraction": 0.9999999999999998,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.004000000000000002,
+        0.022011880930395165
+      ],
+      "vy_widths": [
+        0.04,
+        0.08284259165323721
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 1873.817422860383,
+      "y_eq": -0.005235301945813393,
+      "eps": [
+        0.008671196122309125,
+        0.022016337647596477
+      ],
+      "empirical_floor": [
+        0.005270607244723812,
+        0.006949552371916079
+      ],
+      "cover_fraction": 0.9999999999999998,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.004,
+        0.021386957020184044
+      ],
+      "vy_widths": [
+        0.04,
+        0.09017021253148225
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 5336.699231206308,
+      "y_eq": -0.0018382148918260376,
+      "eps": [
+        0.012451927884316922,
+        0.027451585473331656
+      ],
+      "empirical_floor": [
+        0.008348902009696188,
+        0.018263155498329908
+      ],
+      "cover_fraction": 1.0,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.004,
+        0.028998933904327735
+      ],
+      "vy_widths": [
+        0.04,
+        0.10861657894859245
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 15199.11082952933,
+      "y_eq": -0.0006454324933890745,
+      "eps": [
+        0.024543801792972806,
+        0.048089886168875474
+      ],
+      "empirical_floor": [
+        0.02005297892498055,
+        0.04174706633480349
+      ],
+      "cover_fraction": 1.0,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.004,
+        0.052991717932774865
+      ],
+      "vy_widths": [
+        0.04,
+        0.16913878785878436
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 43287.612810830615,
+      "y_eq": -0.00022662372357815783,
+      "eps": [
+        0.00796246997996039,
+        0.035339699782589974
+      ],
+      "empirical_floor": [
+        0.006244403895685247,
+        0.021976863103682465
+      ],
+      "cover_fraction": 1.0,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.004,
+        0.019210873773539642
+      ],
+      "vy_widths": [
+        0.04,
+        0.19463712654995802
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 123284.67394420659,
+      "y_eq": -7.957193450046833e-05,
+      "eps": [
+        0.018492596155028174,
+        0.10474082412312723
+      ],
+      "empirical_floor": [
+        0.016225199471989447,
+        0.10168292718729399
+      ],
+      "cover_fraction": 0.9999999999999998,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.004,
+        0.04720941425077645
+      ],
+      "vy_widths": [
+        0.04,
+        0.4700018863621928
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 351119.17342151277,
+      "y_eq": -2.7939231869355243e-05,
+      "eps": [
+        0.012684406909876258,
+        0.3804674849615229
+      ],
+      "empirical_floor": [
+        0.006080800419895352,
+        0.376308779087254
+      ],
+      "cover_fraction": 1.0,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.004,
+        0.06495453518474123
+      ],
+      "vy_widths": [
+        0.04,
+        1.541542660464088
+      ],
+      "kill_by_5": true
+    },
+    {
+      "k": 1000000.0,
+      "y_eq": -9.810000000000001e-06,
+      "eps": [
+        0.031722730773133485,
+        2.5799400522125295
+      ],
+      "empirical_floor": [
+        0.021391115658575748,
+        2.5023723912294225
+      ],
+      "cover_fraction": 1.0,
+      "requested_horizon": 10,
+      "achieved_horizon": 1,
+      "cover_exit_reason": "state x U_1 left the certified cover before step 1; certified horizon stops at 1",
+      "y_widths": [
+        0.004,
+        0.07378504406754274
+      ],
+      "vy_widths": [
+        0.04,
+        7.57456762502826
+      ],
+      "kill_by_5": true
+    }
+  ]
+}

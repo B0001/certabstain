@@ -1,0 +1,136 @@
+{
+  "model": "SpringDamper2D",
+  "vy_component": 3,
+  "rows": [
+    {
+      "k": 10.0,
+      "straddle_enc_width": 1.0070500000000002,
+      "straddle_mc_width": 1.002,
+      "straddle_sharpness": 1.005039920159681,
+      "contact_enc_width": 1.0071,
+      "contact_mc_width": 0.99698,
+      "contact_sharpness": 1.0101506549780337,
+      "point_width": 5.551115123125783e-17
+    },
+    {
+      "k": 31.622776601683793,
+      "straddle_enc_width": 1.0071581138830086,
+      "straddle_mc_width": 1.002,
+      "straddle_sharpness": 1.0051478182465154,
+      "contact_enc_width": 1.007316227766017,
+      "contact_mc_width": 0.9969367544467966,
+      "contact_sharpness": 1.0104113658894842,
+      "point_width": 8.326672684688674e-17
+    },
+    {
+      "k": 100.0,
+      "straddle_enc_width": 1.0075000000000003,
+      "straddle_mc_width": 1.002,
+      "straddle_sharpness": 1.0054890219560881,
+      "contact_enc_width": 1.0080000000000002,
+      "contact_mc_width": 0.9968,
+      "contact_sharpness": 1.01123595505618,
+      "point_width": 8.326672684688674e-17
+    },
+    {
+      "k": 316.2277660168379,
+      "straddle_enc_width": 1.0085811388300843,
+      "straddle_mc_width": 1.002,
+      "straddle_sharpness": 1.0065680028244355,
+      "contact_enc_width": 1.0101622776601684,
+      "contact_mc_width": 0.9963675444679664,
+      "contact_sharpness": 1.013845024628505,
+      "point_width": 5.551115123125783e-17
+    },
+    {
+      "k": 1000.0,
+      "straddle_enc_width": 1.0120000000000002,
+      "straddle_mc_width": 1.002,
+      "straddle_sharpness": 1.00998003992016,
+      "contact_enc_width": 1.0170000000000003,
+      "contact_mc_width": 1.0,
+      "contact_sharpness": 1.0170000000000003,
+      "point_width": 8.326672684688674e-17
+    },
+    {
+      "k": 3162.2776601683795,
+      "straddle_enc_width": 1.022811388300842,
+      "straddle_mc_width": 1.0128113883008418,
+      "straddle_sharpness": 1.0098735066721325,
+      "contact_enc_width": 1.0372982212813473,
+      "contact_mc_width": 1.017298221281347,
+      "contact_sharpness": 1.0196599183814645,
+      "point_width": 8.326672684688674e-17
+    },
+    {
+      "k": 10000.0,
+      "straddle_enc_width": 1.0570000000000004,
+      "straddle_mc_width": 1.047,
+      "straddle_sharpness": 1.0095510983763136,
+      "contact_enc_width": 1.0920000000000003,
+      "contact_mc_width": 1.072,
+      "contact_sharpness": 1.0186567164179108,
+      "point_width": 1.3877787807814457e-16
+    },
+    {
+      "k": 31622.776601683792,
+      "straddle_enc_width": 1.1651138830084193,
+      "straddle_mc_width": 1.1551138830084189,
+      "straddle_sharpness": 1.0086571550624568,
+      "contact_enc_width": 1.264982212813471,
+      "contact_mc_width": 1.2449822128134702,
+      "contact_sharpness": 1.0160644865397745,
+      "point_width": 3.469446951953614e-16
+    },
+    {
+      "k": 100000.0,
+      "straddle_enc_width": 1.5070000000000006,
+      "straddle_mc_width": 1.4969999999999999,
+      "straddle_sharpness": 1.0066800267201073,
+      "contact_enc_width": 1.8120000000000012,
+      "contact_mc_width": 1.7920000000000003,
+      "contact_sharpness": 1.0111607142857149,
+      "point_width": 8.326672684688674e-16
+    },
+    {
+      "k": 316227.7660168379,
+      "straddle_enc_width": 2.588138830084192,
+      "straddle_mc_width": 2.57813883008419,
+      "straddle_sharpness": 1.003878767071545,
+      "contact_enc_width": 3.5418221281347075,
+      "contact_mc_width": 3.521822128134703,
+      "contact_sharpness": 1.0056788785101414,
+      "point_width": 3.1086244689504383e-15
+    },
+    {
+      "k": 1000000.0,
+      "straddle_enc_width": 6.007000000000006,
+      "straddle_mc_width": 5.997,
+      "straddle_sharpness": 1.001667500416876,
+      "contact_enc_width": 9.012000000000015,
+      "contact_mc_width": 8.992,
+      "contact_sharpness": 1.0022241992882577,
+      "point_width": 1.2434497875801753e-14
+    },
+    {
+      "k": 3162277.660168379,
+      "straddle_enc_width": 16.81838830084191,
+      "straddle_mc_width": 16.808388300841898,
+      "straddle_sharpness": 1.0005949410390234,
+      "contact_enc_width": 26.310221281347065,
+      "contact_mc_width": 26.29022128134703,
+      "contact_sharpness": 1.000760739127526,
+      "point_width": 2.6645352591003757e-14
+    },
+    {
+      "k": 10000000.0,
+      "straddle_enc_width": 51.007000000000055,
+      "straddle_mc_width": 50.997,
+      "straddle_sharpness": 1.0001960899660776,
+      "contact_enc_width": 81.01200000000014,
+      "contact_mc_width": 80.992,
+      "contact_sharpness": 1.0002469379691838,
+      "point_width": 9.947598300641403e-14
+    }
+  ]
+}
