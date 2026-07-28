@@ -1,0 +1,35 @@
+; certabstain M1 cross-check instance
+; property below is the NEGATION of our claim: unsat/safe = no
+; contradiction with our certified bounds (padded outward by 2 ulp steps); sat = counterexample, release blocker.
+
+(declare-const X_0 Real)
+(declare-const X_1 Real)
+(declare-const X_2 Real)
+(declare-const X_3 Real)
+(declare-const X_4 Real)
+(declare-const X_5 Real)
+(declare-const X_6 Real)
+(declare-const X_7 Real)
+(declare-const Y_0 Real)
+(declare-const Y_1 Real)
+(declare-const Y_2 Real)
+(declare-const Y_3 Real)
+
+(assert (>= X_0 np.float64(-0.12020932650165357)))
+(assert (<= X_0 np.float64(0.12732699501996708)))
+(assert (>= X_1 np.float64(-0.20876425981249047)))
+(assert (<= X_1 np.float64(0.03877206170913021)))
+(assert (>= X_2 np.float64(-0.39145637977618536)))
+(assert (<= X_2 np.float64(-0.14392005825456472)))
+(assert (>= X_3 np.float64(0.5436722832696492)))
+(assert (<= X_3 np.float64(0.7912086047912699)))
+(assert (>= X_4 np.float64(0.25361839142356)))
+(assert (<= X_4 np.float64(0.5011547129451807)))
+(assert (>= X_5 np.float64(0.1090790625145484)))
+(assert (<= X_5 np.float64(0.35661538403616905)))
+(assert (>= X_6 np.float64(-0.5056054867460762)))
+(assert (<= X_6 np.float64(-0.2580691652244555)))
+(assert (>= X_7 np.float64(-0.12819120770423525)))
+(assert (<= X_7 np.float64(0.1193451138173854)))
+
+(assert (or (and (>= Y_0 np.float64(0.2845570602266607))) (and (<= Y_0 np.float64(-1.3082317114895838))) (and (>= Y_1 np.float64(0.3114472691689951))) (and (<= Y_1 np.float64(-0.7915734867456807))) (and (>= Y_2 np.float64(1.028059541470205))) (and (<= Y_2 np.float64(-0.4796518230459256))) (and (>= Y_3 np.float64(0.7036020345413868))) (and (<= Y_3 np.float64(-0.4822322867791303)))))

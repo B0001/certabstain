@@ -4,6 +4,13 @@ Version 2.0.0
 
 <https://bigtimelicense.com/versions/2.0.0>
 
+Required Notice: Copyright 2026 Benjamin James Hess (hess.bn@gmail.com)
+
+The licensor is Benjamin James Hess. To request a commercial license under
+[Fair, Reasonable, and Nondiscriminatory Terms](#fair-reasonable-and-nondiscriminatory-terms),
+write to <hess.bn@gmail.com>. This address is the licensor's address for the purposes of
+[How to Request](#how-to-request).
+
 ## Purpose
 
 These terms let you use and share this software for noncommercial purposes and in small business for free, while also guaranteeing that paid licenses for big businesses will be available on fair, reasonable, and nondiscriminatory terms.

@@ -1,0 +1,45 @@
+{
+  "milestone": "M6",
+  "accept_criterion": "certified two-sided monitor on at least the sticking mode with nominal abstention <= 2x the conformal alpha; honest write-up of any mode that fails to certify and why",
+  "rows": [
+    {
+      "mode": "stick",
+      "eps": 0.001000852008067238,
+      "empirical_floor": 0.0004090540733057285,
+      "eps_to_floor_ratio": 2.4467474433855534,
+      "cover_fraction": 0.9978324342519045,
+      "alpha": 0.05,
+      "measured_abstention_rate": 0.0016,
+      "two_alpha_bar": 0.1,
+      "meets_M6_bar": true,
+      "verdict_reason": "nominal abstention rate 0.0016 <= 2*alpha=0.1, with certified eps=0.001001 (cover 99.8%)"
+    },
+    {
+      "mode": "slide_left",
+      "eps": 0.005006783693294895,
+      "empirical_floor": 0.0018397000655597136,
+      "eps_to_floor_ratio": 2.721521723581405,
+      "cover_fraction": 0.9914779877290133,
+      "alpha": 0.05,
+      "measured_abstention_rate": 0.0565,
+      "two_alpha_bar": 0.1,
+      "meets_M6_bar": true,
+      "verdict_reason": "measured_abstention_rate (0.0565) <= 2*alpha (0.1); cover_fraction (99.1%) well above the 90% minimum; eps (0.005007) is a small fraction of py_max (0.04) and within ~2.7x of the sampled empirical floor, so the certificate is tight rather than vacuous"
+    },
+    {
+      "mode": "slide_right",
+      "eps": 0.0029466023375540056,
+      "empirical_floor": 0.0016305771363665442,
+      "eps_to_floor_ratio": 1.8070945,
+      "cover_fraction": 0.9914779877290132,
+      "alpha": 0.05,
+      "measured_abstention_rate": 0.037,
+      "two_alpha_bar": 0.1,
+      "meets_M6_bar": true,
+      "verdict_reason": "measured_abstention_rate (0.037) <= 2*alpha (0.1); cover_fraction (99.1%) well above the 90% minimum; eps (0.00295) is a small fraction of py_max (0.04) and within ~1.8x of the sampled empirical floor, so the certificate is tight rather than vacuous"
+    }
+  ],
+  "modes_meeting_bar": 3,
+  "modes_total": 3,
+  "stick_meets_required_bar": true
+}

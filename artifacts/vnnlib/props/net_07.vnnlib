@@ -1,0 +1,22 @@
+; certabstain M1 cross-check instance
+; property below is the NEGATION of our claim: unsat/safe = no
+; contradiction with our certified bounds (padded outward by 2 ulp steps); sat = counterexample, release blocker.
+
+(declare-const X_0 Real)
+(declare-const X_1 Real)
+(declare-const X_2 Real)
+(declare-const X_3 Real)
+(declare-const Y_0 Real)
+(declare-const Y_1 Real)
+(declare-const Y_2 Real)
+
+(assert (>= X_0 np.float64(-0.0067392347086406845)))
+(assert (<= X_0 np.float64(0.24769612589472323)))
+(assert (>= X_1 np.float64(-0.6020829143597867)))
+(assert (<= X_1 np.float64(-0.34764755375642276)))
+(assert (>= X_2 np.float64(-0.23037505956603332)))
+(assert (<= X_2 np.float64(0.024060301037330575)))
+(assert (>= X_3 np.float64(-0.395836297486357)))
+(assert (<= X_3 np.float64(-0.1414009368829931)))
+
+(assert (or (and (>= Y_0 np.float64(0.9151798813565274))) (and (<= Y_0 np.float64(-0.21615506389618336))) (and (>= Y_1 np.float64(-0.169585170377122))) (and (<= Y_1 np.float64(-1.1854218928016231))) (and (>= Y_2 np.float64(0.6757375709146252))) (and (<= Y_2 np.float64(-0.21076019933435178)))))

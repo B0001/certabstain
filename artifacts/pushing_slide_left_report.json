@@ -1,0 +1,69 @@
+{
+  "milestone": "M6 - Planar pushing scale-up",
+  "workstream": "PusherSlider slide_left mode",
+  "mode": "slide_left",
+  "reference_model": "PusherSlider(a=0.05, c=0.03, mu=0.3, dt=0.01, py_max=0.04)",
+  "reference_id": "PusherSlider(a=0.05, c=0.03, mu=0.3, dt=0.01, py_max=0.04)/slide_left h_next",
+  "reduction": "one-step (py, vpx, vpy) -> py2 subsystem; x, y, theta never enter _slide_body or the py-Euler-step in _integrate, so the full 6-D (state, control) map is not certified -- only this exact self-contained 3-input/1-output slice",
+  "clearance_spec": "h_next(py, vpx, vpy) = py_max - |py2(py, vpx, vpy)| (positive = still on the contact face after one slide_left step); py2 from step_interval component index 3",
+  "domain": {
+    "py": [
+      -0.03,
+      0.03
+    ],
+    "vpx": [
+      0.02,
+      0.1
+    ],
+    "vpy": [
+      0.1,
+      0.3
+    ],
+    "fraction_in_slide_left_by_sample": 0.991815,
+    "note": "verified numerically that this box lies >99% inside the slide_left mode (g2<0); box-level mode membership for the certifier itself is handled exactly (not by resampling) via PusherSlider.mode_certificate passed as certify_epsilon's `mode` argument"
+  },
+  "net_architecture": [
+    3,
+    8,
+    1
+  ],
+  "training": {
+    "steps": 12000,
+    "lr": 0.002,
+    "n_train_samples": 120000
+  },
+  "certifier": {
+    "max_leaf_evals": 300000,
+    "floor_samples": 300000,
+    "n_leaf_evals_used": 301039,
+    "n_leaves": 239599,
+    "cover_fraction": 0.9914779877290133,
+    "eps": 0.005006783693294895,
+    "empirical_floor": 0.0018397000655597136,
+    "eps_to_floor_ratio": 2.721521723581405
+  },
+  "monitor": {
+    "alpha": 0.05,
+    "two_alpha_bar": 0.1,
+    "n_calibration_rollouts": 999,
+    "n_eval_rollouts": 2000,
+    "horizon_per_rollout": 20,
+    "calibration_threshold": -0.014849378875324285,
+    "measured_abstention_rate": 0.0565
+  },
+  "h_next_sample_stats": {
+    "min": 0.007338267626259408,
+    "max": 0.039999799800521645,
+    "mean": 0.025262893459912117
+  },
+  "verdict": {
+    "meets_M6_bar": true,
+    "reason": "measured_abstention_rate (0.0565) <= 2*alpha (0.1); cover_fraction (99.1%) well above the 90% minimum; eps (0.005007) is a small fraction of py_max (0.04) and within ~2.7x of the sampled empirical floor, so the certificate is tight rather than vacuous"
+  },
+  "notes": [
+    "Spec section 6 only requires the 2*alpha nominal-abstention bar on the sticking mode; slide_left clearing it as well (like its slide_right sibling) is a bonus finding for this mode, not a forced result -- the first reasonable budget (300k leaf evals, matching the slide_right workstream's choice) already cleared it with no domain shrinkage needed.",
+    "h_next stays comfortably positive across the whole declared domain (sampled min 0.007338, well clear of the py_max=0.04 unsafe-at-zero boundary): the pusher never comes close to sliding the contact off the face in one step at these vpx/vpy magnitudes, so this is not a stiff or discontinuity-adjacent regime the way stick's pydot=0-vs-nonzero boundary can be.",
+    "the ~0.82% of the domain outside slide_left by sample is exactly what certify_epsilon's box-level `mode` argument excludes from the cover (mode-straddling leaves near the motion-cone boundary get shrunk to min_width and dropped, per spec section 5's 'fails to a smaller domain, never a weaker claim'); this is the entire gap between 100% and the reported 99.1% cover_fraction.",
+    "no dependency was needed beyond what M3/M5 already established: certify_epsilon's own `mode`/`mode_float` arguments handle A2 (mode membership) exactly, and step_interval's certified py2 enclosure was reused directly for the interval twin of h_next rather than hand-deriving an interval form of _slide_body."
+  ]
+}
