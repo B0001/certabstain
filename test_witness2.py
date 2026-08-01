@@ -11,12 +11,15 @@ Spec criteria (section 6, M5):
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 import pytest
 
 from certabstain import (
     ActionGate,
     CircleClearance,
+    HorizonTooShort,
     Interval,
     MLP,
     NetworkCertificateMismatch,
@@ -99,9 +102,14 @@ def test_covers_matches_certificate_contains() -> None:
 # ===================================================================== #
 
 
-def _yv_tube():
-    """A small, fast (y, vy) free-flight tube -- same construction as
-    test_tube.py's acceptance test, reused here for the witness layer."""
+@lru_cache(maxsize=1)
+def _yv_net_and_cert():
+    """The (y, vy) net and its certificate -- same construction as
+    test_tube.py's acceptance test, reused here for the witness layer.
+
+    Cached: certifying this costs 400k leaf evaluations and several tests in
+    this file need it, none of which mutate what they get back.
+    """
     model = SpringDamper2D()
 
     def step(yv, uy):
@@ -142,10 +150,15 @@ def _yv_tube():
         max_leaf_evals=400_000,
         floor_samples=300_000,
     )
+    return net, cert
+
+
+def _yv_tube():
+    """The full-horizon tube: 10 steps requested, 10 certified."""
+    net, cert = _yv_net_and_cert()
     X0 = Interval(np.array([-0.02, -0.02]), np.array([0.02, 0.02]))
     U_box = Interval(np.array([-0.02]), np.array([0.02]))
-    tube = propagate_tube(net, cert, X0, [U_box] * 10, n_states=2)
-    return tube
+    return propagate_tube(net, cert, X0, [U_box] * 10, n_states=2)
 
 
 def test_predictive_tube_witness_score_and_composition() -> None:
@@ -214,8 +227,108 @@ def test_gate_public_surface_unchanged_by_the_cover_addition() -> None:
     import inspect
 
     public = [n for n in dir(ActionGate) if not n.startswith("_")]
-    assert set(public) == {"authority", "log", "miss_bound", "step", "abstention_rate"}
+    assert set(public) == {"verifier", "log", "miss_bound", "step", "abstention_rate"}
     sig = inspect.signature(ActionGate.__init__)
     assert "cover" in sig.parameters
-    banned = {"force", "override", "strict", "unsafe", "bypass", "skip_check"}
-    assert not banned & set(sig.parameters)
+    # Allowlist, not denylist -- see test_gate_exposes_no_override_path for why.
+    assert set(sig.parameters) == {
+        "self", "threshold", "false_alarm_bound", "safe_action",
+        "claim", "cover",
+    }
+
+
+# ===================================================================== #
+# W2 horizon requirement: spec 7.8 declared where a deployment declares it
+# ===================================================================== #
+
+
+def _short_yv_tube():
+    """The same (y, vy) construction, but with a control box far outside the
+    certified cover so the tube exits immediately: horizon 0 of 3 requested."""
+    net, cert = _yv_net_and_cert()
+    X0 = Interval(np.array([-0.02, -0.02]), np.array([0.02, 0.02]))
+    wide = Interval(np.array([-5.0]), np.array([5.0]))
+    tube = propagate_tube(net, cert, X0, [wide] * 3, n_states=2)
+    assert tube.horizon == 0 and tube.requested_horizon == 3
+    return tube
+
+
+def test_witness_refuses_a_tube_shorter_than_the_requested_horizon() -> None:
+    """The default is strict: propagate K control boxes and you are taken to
+    need K steps, so a collapsed tube refuses without the caller saying
+    anything. This is the case that previously built a one-step witness
+    wearing the K-step interface."""
+    tube = _short_yv_tube()
+    clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
+    with pytest.raises(HorizonTooShort) as exc:
+        PredictiveTubeWitness.build(tube, clear.interval_batch, c_required=-5.0)
+    msg = str(exc.value)
+    assert "need 3" in msg and "certifies 0" in msg
+    assert "before step 0" in msg          # the cover-exit reason, carried through
+
+
+def test_witness_accepts_a_shorter_horizon_when_the_deployment_declares_one() -> None:
+    """A deployment that genuinely needs fewer steps than it propagated says
+    so explicitly, and gets a witness scored over the horizon it declared."""
+    tube = _yv_tube()                       # horizon 10 of 10
+    clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
+    w = PredictiveTubeWitness.build(
+        tube, clear.interval_batch, c_required=-5.0, required_horizon=4
+    )
+    assert w.required_horizon == 4
+    assert "declared requirement 4, met" in w.justification()
+
+
+def test_witness_best_effort_is_opt_in_and_shows_up_in_the_audit_string() -> None:
+    """Explicit None is the old behaviour. It is still available -- studies and
+    exploratory work need it -- but it must be asked for, and the weaker claim
+    is stated in the justification rather than implied by silence."""
+    tube = _short_yv_tube()
+    clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
+    w = PredictiveTubeWitness.build(
+        tube, clear.interval_batch, c_required=-5.0, required_horizon=None
+    )
+    assert w.required_horizon is None
+    assert "best effort" in w.justification()
+    assert "K=0" in w.justification()
+
+
+def test_witness_refuses_a_requirement_longer_than_the_tube_was_propagated() -> None:
+    tube = _yv_tube()                       # 10 requested
+    clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
+    with pytest.raises(HorizonTooShort, match="unreachable by construction"):
+        PredictiveTubeWitness.build(
+            tube, clear.interval_batch, c_required=-5.0, required_horizon=11
+        )
+
+
+def test_witness_refuses_a_nonsensical_requirement() -> None:
+    tube = _yv_tube()
+    clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
+    for bad in (0, -2, 3.5):
+        with pytest.raises(ValueError, match="positive whole number"):
+            PredictiveTubeWitness.build(
+                tube, clear.interval_batch, c_required=-5.0, required_horizon=bad
+            )
+
+
+def test_horizon_refusal_fails_closed_inside_the_gate() -> None:
+    """HorizonTooShort is a CertAbstainError, so if one ever surfaces on the
+    actuation path -- a cover predicate that re-derives a tube, say -- the gate
+    abstains rather than letting the exception escape past it."""
+    tube = _short_yv_tube()
+    clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
+
+    def exploding_cover(_obs):
+        PredictiveTubeWitness.build(tube, clear.interval_batch, c_required=-5.0)
+        return True
+
+    gate = ActionGate(
+        threshold=0.0, false_alarm_bound=0.05, safe_action="STOP",
+        cover=exploding_cover,
+    )
+    d = gate.step(
+        observation=np.zeros(2), proposed_action=np.ones(1), score=-1.0
+    )
+    assert d.abstained and d.action == "STOP"
+    assert "certificate refused" in d.reason and "lookahead" in d.reason

@@ -21,8 +21,11 @@ import pytest
 
 import certabstain.interval as ivmod
 from certabstain import (
+    MLP,
     EnclosureError,
+    NonFiniteEnclosure,
     EnvironmentUnsound,
+    EpsilonCertificate,
     Interval,
     affine,
     matvec,
@@ -224,11 +227,15 @@ def test_exact_containment_against_mpmath() -> None:
 
 
 def test_construction_refusals() -> None:
-    with pytest.raises(EnclosureError):
+    # Inverted endpoints are malformed input, not a lost bound: plain
+    # EnclosureError, and specifically NOT the non-finite subclass.
+    with pytest.raises(EnclosureError) as exc:
         Interval(1.0, 0.0)
-    with pytest.raises(EnclosureError):
+    assert not isinstance(exc.value, NonFiniteEnclosure)
+    # Spec 7.9: a non-finite endpoint is its own refusal type.
+    with pytest.raises(NonFiniteEnclosure):
         Interval(np.nan, 1.0)
-    with pytest.raises(EnclosureError):
+    with pytest.raises(NonFiniteEnclosure):
         Interval(0.0, np.inf)
 
 
@@ -237,11 +244,14 @@ def test_operation_refusals() -> None:
         Interval.point(1.0) / Interval(-1.0, 1.0)
     with pytest.raises(EnclosureError, match="below zero"):
         Interval(-1.0, 4.0).sqrt()
-    with pytest.raises(EnclosureError, match="overflow"):
+    # Overflow is a bound lost to non-finiteness, so it carries that type;
+    # division-by-zero-containing and sqrt-below-zero above are domain
+    # violations and deliberately stay the plain class.
+    with pytest.raises(NonFiniteEnclosure, match="overflow"):
         Interval.point(1000.0).exp()
-    with pytest.raises(EnclosureError):  # add overflow -> non-finite endpoint
+    with pytest.raises(NonFiniteEnclosure):  # add overflow -> non-finite endpoint
         Interval.point(1.7e308) + Interval.point(1.7e308)
-    with pytest.raises(EnclosureError):  # mul overflow
+    with pytest.raises(NonFiniteEnclosure):  # mul overflow
         Interval.point(1e200) * Interval.point(1e200)
 
 
@@ -338,11 +348,13 @@ def test_affine_matches_matvec_plus_bias() -> None:
 
 def test_matvec_shape_and_finiteness_refusals() -> None:
     x = Interval(np.zeros(3), np.ones(3))
+    # Shape errors are caller bugs and keep the plain class; only the
+    # finiteness failure is spec 7.9's refusal.
     with pytest.raises(EnclosureError, match="2-D"):
         matvec(np.zeros(3), x)
     with pytest.raises(EnclosureError, match="mismatch"):
         matvec(np.zeros((2, 4)), x)
-    with pytest.raises(EnclosureError, match="non-finite"):
+    with pytest.raises(NonFiniteEnclosure, match="non-finite"):
         matvec(np.array([[np.nan, 0.0, 0.0]]), x)
 
 
@@ -377,3 +389,57 @@ def test_self_test_refuses_on_corrupted_reference(monkeypatch) -> None:
         rounding_self_test()
     with pytest.raises(EnvironmentUnsound):
         require_sound_environment()  # failure is never cached as success
+
+
+def test_nothing_certifies_on_an_unsound_environment(monkeypatch) -> None:
+    """Spec 7.6 says "refuse to certify *anything*", so pin it at the two
+    entry points that mint or propagate a claim, not only at the self-test.
+
+    Both call require_sound_environment() first; a refactor that dropped
+    either call would leave the self-test passing and the refusal gone.
+    """
+    import certabstain.discrepancy as dmod
+    import certabstain.tube as tmod
+
+    def boom() -> None:
+        raise EnvironmentUnsound("simulated unsound substrate")
+
+    for mod in (dmod, tmod):
+        monkeypatch.setattr(mod, "require_sound_environment", boom)
+
+    net = MLP.random((2, 4, 1), rng=np.random.default_rng(0), scale=0.5)
+    domain = Interval(-0.1 * np.ones(2), 0.1 * np.ones(2))
+
+    with pytest.raises(EnvironmentUnsound):
+        dmod.certify_epsilon(
+            net,
+            lambda lo, hi: (np.zeros((lo.shape[0], 1)), np.zeros((lo.shape[0], 1))),
+            domain,
+            reference_id="unsound-environment guard test",
+            target=None,
+            max_leaf_evals=100,
+        )
+
+    with pytest.raises(EnvironmentUnsound):
+        tmod.propagate_tube(
+            net, _unused_cert_for_guard(), Interval(np.zeros(1), np.zeros(1)), [],
+            n_states=1,
+        )
+
+
+def _unused_cert_for_guard():
+    """A certificate the guard test never gets far enough to read."""
+    return EpsilonCertificate(
+        eps=np.zeros(1),
+        domain_lo=np.zeros(1),
+        domain_hi=np.zeros(1),
+        cover_lo=np.zeros((1, 1)),
+        cover_hi=np.zeros((1, 1)),
+        cover_fraction=1.0,
+        net_hash="unused",
+        reference_id="unused",
+        empirical_floor=np.zeros(1),
+        n_leaf_evals=0,
+        n_leaves=1,
+        target=None,
+    )

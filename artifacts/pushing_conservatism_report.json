@@ -30,13 +30,13 @@
       "mode": "slide_right",
       "eps": 0.0029466023375540056,
       "empirical_floor": 0.0016305771363665442,
-      "eps_to_floor_ratio": 1.8070945,
+      "eps_to_floor_ratio": 1.8070916559764805,
       "cover_fraction": 0.9914779877290132,
       "alpha": 0.05,
       "measured_abstention_rate": 0.037,
       "two_alpha_bar": 0.1,
       "meets_M6_bar": true,
-      "verdict_reason": "measured_abstention_rate (0.037) <= 2*alpha (0.1); cover_fraction (99.1%) well above the 90% minimum; eps (0.00295) is a small fraction of py_max (0.04) and within ~1.8x of the sampled empirical floor, so the certificate is tight rather than vacuous"
+      "verdict_reason": "measured_abstention_rate (0.037) <= 2*alpha (0.1); cover_fraction (99.1%) against the 90% declared minimum; eps (0.00295) is a small fraction of py_max (0.04) and within 1.81x of the sampled empirical floor, so the certificate is tight rather than vacuous"
     }
   ],
   "modes_meeting_bar": 3,

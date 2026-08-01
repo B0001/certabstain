@@ -248,15 +248,30 @@ distinct abstention reason, and each has a test.
 1. Branch-and-bound budget exhausted with ε above target → refuse; report
    achieved ε and worst leaf.
 2. Certified cover below the declared minimum fraction of `D` → refuse.
-3. Requested box not expressible inside any declared mode → refuse.
+3. Requested box not expressible inside any declared mode → refuse
+   (`ModeIndeterminate`).
 4. Weight-hash mismatch at witness load → refuse.
 5. Reference model identity/parameter mismatch → refuse.
 6. Rounding self-test failure at startup → refuse to certify anything.
 7. Runtime state outside the certified cover → abstain (gate).
 8. Tube exits cover before the required horizon → certified horizon shrinks;
-   refuse if below the horizon the deployment declared.
+   refuse if below the horizon the deployment declared (`HorizonTooShort`).
+   The requirement is declared at **witness construction**
+   (`PredictiveTubeWitness.build`), defaulting to the tube's requested
+   horizon, because that is the layer a deployment passes through;
+   `propagate_tube` takes the same argument as an optional early-out, but its
+   real callers are the sweeps, which want the permissive default. A
+   requirement stated only there would be stated nowhere that deploys.
 9. Non-finite anywhere on the certification path → refuse/abstain, as in
-   Phase 1.
+   Phase 1 (`NonFiniteEnclosure`; at the gate, the abstention reason
+   "non-finite monitor score").
+
+Items 3 and 9 are subclasses of `EnclosureError` rather than the bare class,
+so the "distinct exception" above holds under a *type* reading and not only by
+matching message text — while any existing handler catching `EnclosureError`
+keeps working. The bare class is retained for the conditions that are neither:
+domain violations (division by an interval containing zero, `sqrt` below zero)
+and caller-side shape mismatches.
 
 ---
 
@@ -268,8 +283,29 @@ corner sampling (box vertices, mode-boundary-adjacent points, near-zero
 crossings for ReLU). **Refusal coverage:** one test per item in §7. **Freeze
 tests:** the certificate dataclass is frozen/slotted; the gate's public
 surface remains exactly Phase 1's plus nothing (inspect-based test, extended
-from Phase 1); no `force`/`override`/`strict` parameter anywhere, enforced by
-the same signature scan.
+from Phase 1); no bypass parameter anywhere in the `gate` module's public
+surface, enforced by the same signature scan.
+
+The scan is an **allowlist**, deliberately: it names every permitted public
+attribute and every permitted parameter of every class exported by `gate`
+(`ActionGate`, `CertificateAuthority`, `CertificateVerifier`,
+`SafetyCertificate`, `GateDecision`), so a new one fails the test rather than
+passing under a name no denylist anticipated. A mutation study is what forced
+this: against a denylist version, a new public `CertificateAuthority.
+mint_unchecked`, a new `allow_any=` parameter on `mint`, and a public
+*instance* attribute honoured by `step` all shipped green. The last of those
+is why the scan also asserts `__slots__` — `dir()` is a class scan and cannot
+see instance attributes.
+
+Two limits of the freeze tier are worth stating rather than implying:
+`__slots__` prevents *new* attributes, not assignment to existing private
+ones, and no in-process Python check can prevent code that already runs in
+the interpreter from reaching a private attribute. The gate's claim is
+therefore about its **API surface** — no supported call sequence yields an
+uncertified emission or a certificate the gate did not itself authorize —
+plus deployment separation of the certificate authority. Memory isolation
+against hostile in-process code is not claimed and would need a separate
+process or an HSM.
 
 External cross-check: the VNNLIB instances and α,β-CROWN results are committed
 as artifacts so a third party can re-verify without our code.

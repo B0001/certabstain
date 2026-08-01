@@ -146,7 +146,7 @@ naive *verification* of it too, because the one-step map steepens near the
 contact guard and interval enclosures widen with it. Three milestones measure
 three different faces of that same obstruction.
 
-### M2 — single-step enclosure vs. stiffness (`stiffness_sweep.json`)
+### M2 — single-step enclosure vs. stiffness (`artifacts/stiffness_sweep.json`)
 
 On `SpringDamper2D`'s `vy'` component, across `k` from `10` to `10^7` (six
 orders of magnitude), two boxes are measured: `straddle` (crossing the
@@ -154,14 +154,14 @@ contact guard) and `contact` (strictly inside contact), plus a single
 in-contact `point` isolating pure rounding cost.
 
 The true reachable width (`mc_width`, estimated by 4×10^5 Monte Carlo
-samples) blows up by roughly two orders of magnitude over the sweep —
+samples) blows up by between one and two orders of magnitude over the sweep —
 `straddle_mc_width` goes from `1.002` at `k=10` to `51.0` at `k=10^7`;
 `contact_mc_width` from `0.997` to `80.99` over the same range. What stays
 close to flat is *sharpness*, the ratio `enc_width / mc_width`: it sits
 between roughly `1.0002` and `1.02` across the entire sweep for both boxes —
 i.e. our interval enclosure never inflates the *true* reachable width by more
 than ~2%. `point_width` (pure rounding cost, no reachable-set contribution)
-stays at `~1e-17` to `~1e-13` throughout — negligible next to the
+stays at `~1e-16` to `~1e-13` throughout — negligible next to the
 physics-driven blowup. Read together: the enclosure tracks the true
 reachable set almost exactly at every stiffness tested; the width explosion
 is the physics itself getting steeper, not our specific bound getting
@@ -186,9 +186,16 @@ The certified horizon collapses from 7 steps at the lowest stiffness tested
 down to a floor of 1 step by `k ≈ 231` and stays there for every higher
 stiffness sampled, up to `k = 10^6`. Every single row in the sweep — *including
 the least-stiff one, `k=10`* — also trips the script's own kill-criterion
-check (`kill_by_5: true` on all twelve rows): `vy_width` at step 5 already
-exceeds the declared `0.15` clearance band even in the best case measured
-here (`vy_widths[5] = 0.331` at `k=10`, more than double the band). Read
+check (`kill_by_5: true` on all twelve rows). That check has two clauses
+(`tube_sweep.py:107`): the tube failed to reach step 5 at all, *or* its
+`vy_width` at step 5 exceeds the declared `0.15` clearance band. Which clause
+fires is worth separating, because they say different things. At `k=10` — the
+best case measured here — the tube does reach step 5 and the width clause is
+what trips it: `vy_widths[5] = 0.333`, more than double the band. For the
+other eleven rows the achieved horizon is ≤ 4, so the tube never reaches step
+5 and the horizon clause is what fires; those rows have no step-5 width to
+compare (at `k=81.11`, for instance, the tube stops after 3 steps at a width
+of `0.124`, still *inside* the band when it ran out of certified cover). Read
 plainly, per spec §5's discipline of reporting shrinkage rather than hiding
 it: within the parameter range this sweep covers, the M4 kill-criterion
 checkpoint (spec §6: "if the tube engulfs the clearance band by K=5 at low
@@ -206,9 +213,10 @@ Two separate scaling questions, both explicitly asked for by spec §6.
 contraction with a closed-form true sup-gap, so this isolates branch-and-bound
 geometry from any training noise): the ratio of certified ε to the true gap
 grows from `1.06×` at `d=2` to `5.00×` at `d=8` (the spec's own v1 input-dim
-cap), at essentially constant leaf-eval count (~50,700) and wall time
-(0.16 s–0.30 s). Branch-and-bound splits one axis per refinement, so the same
-budget buys an exponentially coarser per-axis width as dimension grows —
+cap), at essentially constant leaf-eval count (~50,700). Branch-and-bound
+splits one axis per refinement, so the same
+budget buys an exponentially coarser per-axis width as dimension grows (the
+same budget, and wall times of 0.14 s–0.30 s across the six dimensions) —
 exactly the effect predicted in spec §9's risk list ("BnB blowup in input
 dimension").
 
@@ -230,7 +238,7 @@ against a fixed cover, so the certified *horizon* collapses hard and early
 stiffness tested). Separately, and orthogonally, the same branch-and-bound
 machinery loses ground as input dimension grows at a fixed budget (M6:
 1.06×→5.00× from d=2 to d=8), and even a favorable low-stiffness tube has
-only a handful of certified steps of headroom past whatever horizon was
+only a single certified step of headroom past whatever horizon was
 targeted (M6: 11 vs. 10 requested). None of these is a bug; they are the
 Parmar–Halm–Posa obstruction and BnB's own combinatorics showing up exactly
 where the spec predicted they would.
@@ -266,16 +274,23 @@ subsystem, mode membership handled exactly at the box level via
 Spec §6's accept bar is explicit that only the **sticking mode** is required
 to clear nominal abstention ≤ 2α; the other two modes get an honest write-up
 whichever way they land. All three modes cleared the bar here. The stick
-certificate is also the tightest by a wide margin (ε within ~2.4× of the
-10^7-sample empirical floor, cover 99.8% of the declared domain over 126,368
-leaves) — consistent with §3's read that per-mode certification is exactly
+certificate is also the tightest in absolute ε by a wide margin (0.001001,
+roughly 3–5× smaller than the other two modes'), at ε within ~2.4× of its
+3×10^5-sample empirical floor and a cover of 99.8% of the declared domain over
+126,368 leaves. Note that on the ε/floor *ratio* — how much conservatism
+branch-and-bound added on top of what sampling could already see — stick is
+not the best of the three: slide_right is tighter at 1.81× (against stick's
+2.45× and slide_left's 2.72×). The two readings differ because each mode's
+floor is against its own reachable set, and stick's is by far the smallest.
+This is consistent with §3's read that per-mode certification is exactly
 the mitigation that lets a route which collapses badly on the raw
 free-flight tube still produce a usable certificate once the mode predicate
-does the discontinuity's work. `slide_right`'s per-mode report additionally
-notes a second training-seed run that fit less tightly (train MAE ~0.0074 vs
-~0.0001) and produced a looser ε (~0.019); the abstention rate still cleared
-the 2α bar in that run too, so the pass on this mode is not a single-seed
-artifact.
+does the discontinuity's work. `slide_right`'s report additionally carries a
+second-seed check, re-run as part of the test rather than recorded as prose: a
+different data/fit seed (23/11 vs. 7/0) fits a little less tightly (train MAE
+1.6×10^-4 vs. 8.8×10^-5) and certifies a looser ε (0.00682 vs. 0.00295, at the
+same 99.15% cover), and its measured abstention rate of 3.8% still clears the
+2α bar — so the pass on this mode is not a single-seed artifact.
 
 ---
 
@@ -299,7 +314,7 @@ Which artifact reproduces which result:
 
 | Script / test | Produces | Section |
 |---|---|---|
-| `stiffness_sweep.py` | `stiffness_sweep.json` (+ `.png`) | §3, M2 |
+| `stiffness_sweep.py` | `artifacts/stiffness_sweep.json` (+ `.png`) | §3, M2 |
 | `tube_sweep.py` | `artifacts/tube_sweep.json` (+ `.png`) | §3, M4 |
 | `scaling_study.py` | `artifacts/scaling_study.json` (+ `.png`) | §3, M6 |
 | `test_pushing_stick.py` | `artifacts/pushing_stick_report.json` | §4, M6 |
@@ -312,6 +327,20 @@ their respective test modules under pytest (each ends by dumping its own
 report JSON), not by standalone scripts; `pushing_conservatism_report.py`
 then only reads and consolidates those three files — run the tests first if
 regenerating from scratch.
+
+Every number in §3 and §4 above was re-derived from these artifacts, and each
+artifact re-derived from the script or test named here, as a check on this
+note itself. Two things that check turned up and this note now reflects:
+`stiffness_sweep.py` writes to `artifacts/`, while the cited copy of
+`stiffness_sweep.json` sat at the repo root, left over from an earlier revision
+of the script — re-running reproduced it to the last ulp, and the root
+duplicate has since been removed so the cited path and the reproduction path
+are the same one; and `pushing_slide_right_report.json`, alone
+among the three, had no code that produced it (its figures were transcribed by
+hand) until `test_pushing_slide_right.py` gained the same report-dumping step
+its two siblings already had. Regenerating it reproduced every substantive
+field exactly, so §4's table is unchanged — but the provenance now matches
+what the paragraph above claims for it.
 
 `artifacts/vnnlib/` holds a separate, independent cross-check: VNNLIB/ONNX
 instances generated by `certabstain.vnnlib.generate_artifact_set`, pairing
@@ -334,6 +363,40 @@ instructions — is itself the write-up half of M7 (spec §6). VNNLIB
 cross-check artifacts (§5) are the other verification-facing M7 deliverable
 and already exist under `artifacts/vnnlib/`, awaiting an out-of-band
 α,β-CROWN run by whoever picks that up.
+
+An adversarial audit of the claims in this note, in `SPEC.md`, and in the
+gate itself was run as part of M7, and three things it found are worth
+recording rather than quietly fixing:
+
+- **The gate's non-bypassability claim was, as originally written, false.**
+  A public `authority` property handed out a `mint()` oracle that applied no
+  score, threshold, or cover check, and the `authority=` constructor argument
+  accepted any object whose `verify()` returned `True`. Both are closed (a
+  mint-free `CertificateVerifier`, and a type check), the certificate's MAC
+  now covers `score` and `threshold` rather than leaving them re-labellable,
+  and the signature scan that enforces all of this is now an allowlist over
+  the whole gate module instead of a six-name denylist over one class. The
+  claim is now stated with its real scope: it is a property of the **API
+  surface**, not memory isolation.
+- **Spec §7 item 8's refusal half did not exist.** The certified horizon
+  shrank and reported, but nothing refused when it came in under the horizon
+  a deployment declared it needed. Both layers now carry the requirement:
+  `propagate_tube` takes it as an optional early-out, and
+  `PredictiveTubeWitness.build` — the layer a deployment actually passes
+  through — requires the tube's requested horizon by default and raises
+  `HorizonTooShort` otherwise. Accepting a truncated tube silently was not a
+  cosmetic gap: it produced a witness scoring over a single step while
+  presenting the K-step interface, which composes into a claim that reads as
+  predictive. Best-effort is still available, as an explicit
+  `required_horizon=None` that says so in the witness's own justification
+  string.
+- **Spec §7's "each is a distinct exception" was true only by message text**
+  for items 3 and 9, which shared a bare `EnclosureError`. They now have
+  distinct subclasses.
+
+None of this changed a certified number: the §3 and §4 results stand exactly
+as reported, and were re-derived from their artifacts as part of the same
+pass.
 
 The provisional-patent outline is a separate document, drafted in parallel
 by a different workstream, and is explicitly out of scope for this note —

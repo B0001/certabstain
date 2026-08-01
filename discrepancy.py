@@ -36,7 +36,12 @@ from typing import Callable
 
 import numpy as np
 
-from .errors import CoverTooSmall, EnclosureError, TargetNotCertified
+from .errors import (
+    CoverTooSmall,
+    EnclosureError,
+    NonFiniteEnclosure,
+    TargetNotCertified,
+)
 from .gate import _canonical
 from .interval import Interval, _down, _up, require_sound_environment
 from .nnbound import MLP, crown_bounds
@@ -102,8 +107,12 @@ def _gap_bound(net, ref: RefFn, lo, hi):
     """Two-enclosure per-box bound on |g_hat - g|: (B, n_out)."""
     nlo, nhi = _batched_ibp(net, lo, hi)
     rlo, rhi = ref(lo, hi)
-    if not (np.all(np.isfinite(nlo)) and np.all(np.isfinite(rhi))):
-        raise EnclosureError("bound computation lost finiteness; shrink boxes")
+    # All four endpoints, not just two: the returned bound reads nhi and rlo as
+    # well, so checking only (nlo, rhi) let a half-infinite reference through
+    # and minted a certificate with eps = inf -- vacuous, and sound only in the
+    # useless sense. Spec 7.9 says non-finite *anywhere* on the path refuses.
+    if not all(np.all(np.isfinite(a)) for a in (nlo, nhi, rlo, rhi)):
+        raise NonFiniteEnclosure("bound computation lost finiteness; shrink boxes")
     return np.maximum(_up(nhi - rlo), _up(rhi - nlo))
 
 
@@ -139,9 +148,22 @@ class EpsilonCertificate:
     def __post_init__(self) -> None:
         for name in ("eps", "domain_lo", "domain_hi", "cover_lo", "cover_hi",
                      "empirical_floor"):
-            arr = np.asarray(getattr(self, name), dtype=np.float64)
+            # np.array copies; np.asarray would hand back the caller's own
+            # object when it is already float64, leaving the base array
+            # writable through any view the caller kept -- so the read-only
+            # flag below would protect nothing.
+            arr = np.array(getattr(self, name), dtype=np.float64)
             arr.setflags(write=False)
             object.__setattr__(self, name, arr)
+        # A certificate asserting an infinite bound asserts nothing. Refuse at
+        # construction so no such object can be handed out, whatever path
+        # produced the number.
+        if not np.all(np.isfinite(self.eps)):
+            raise NonFiniteEnclosure(
+                f"certificate eps is non-finite ({self.eps!r}); an unbounded "
+                f"epsilon is vacuous, not conservative. Shrink the domain or "
+                f"fix the reference enclosure."
+            )
 
     def matches_network(self, net: MLP) -> bool:
         return weights_hash(net) == self.net_hash

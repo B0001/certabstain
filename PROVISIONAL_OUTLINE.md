@@ -103,7 +103,22 @@ only by a separate authority, never by the policy), is bound to the current
 control epoch and to the exact observation/action pair, and has not been
 consumed before. There is no override, no force flag, no strict-off
 parameter anywhere in the gate's public surface — a property that is itself
-enforced by an automated signature scan, not merely a code-review convention.
+enforced by an automated signature scan (an allowlist over every public
+callable the gate module exports), not merely a code-review convention. The
+gate exposes only a mint-free verifier view of the authority, so no supported
+call sequence lets the controlling policy issue itself a certificate.
+
+*Scope note for the attorney, stated because the distinction is material to
+how any claim should be worded:* in the reference implementation the
+"separateness" of the certificate authority is enforced at the **API
+surface** — the policy has no supported path to the minting capability or the
+key. It is not memory isolation, and the implementation does not claim it: in
+a single Python process, code already executing in the interpreter can reach
+a private attribute regardless. The architecturally strong form of this
+element is the authority residing in a separate process, enclave, or HSM,
+reachable only by an authenticated request; a claim drafted around
+"inaccessible to the policy" should be scoped to whichever of those two the
+applicant intends to cover.
 
 ---
 

@@ -30,12 +30,27 @@ from dataclasses import dataclass
 import numpy as np
 
 from .discrepancy import EpsilonCertificate
-from .errors import NetworkCertificateMismatch, ReferenceMismatch
+from .errors import HorizonTooShort, NetworkCertificateMismatch, ReferenceMismatch
 from .nnbound import MLP
 from .soundness import CertifiedModelErrorWitness
 from .tube import TubeResult, clearance_lower_bounds
 
 __all__ = ["VerifiedDiscrepancyWitness", "PredictiveTubeWitness"]
+
+
+class _RequireRequested:
+    """Sentinel: default to requiring the horizon the tube was asked for.
+
+    A distinct type rather than ``None``, because ``None`` is itself a
+    meaningful value here -- it opts *out* of the requirement -- and the two
+    must not be spelled the same way.
+    """
+
+    def __repr__(self) -> str:  # pragma: no cover -- diagnostics only
+        return "<the tube's requested horizon>"
+
+
+_REQUIRE_REQUESTED = _RequireRequested()
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,16 +119,80 @@ class PredictiveTubeWitness:
     Construct only through :meth:`build`, from an already-propagated M4
     :class:`~certabstain.tube.TubeResult` (which itself refuses a mismatched
     network -- spec A4 -- before any tube exists to build a witness from).
+
+    This is where a deployment declares the lookahead it needs (spec 7.8).
+    ``propagate_tube`` has its own optional ``required_horizon``, but its real
+    callers are the sweeps, which deliberately want the permissive default --
+    so a requirement stated only there is stated nowhere a deployment passes.
+    A tube truncated to one step would otherwise produce a witness whose score
+    maxes over a single step, wearing the K-step interface and composing into a
+    claim that reads as predictive.
     """
 
     tube: TubeResult
     clearance_lo: np.ndarray
     c_required: float
+    required_horizon: int | None
 
     @classmethod
-    def build(cls, tube: TubeResult, clearance_batched, c_required: float) -> "PredictiveTubeWitness":
+    def build(
+        cls,
+        tube: TubeResult,
+        clearance_batched,
+        c_required: float,
+        *,
+        required_horizon: int | None = _REQUIRE_REQUESTED,  # type: ignore[assignment]
+    ) -> "PredictiveTubeWitness":
+        """Build the witness, or refuse if the tube is shorter than declared.
+
+        Parameters
+        ----------
+        required_horizon
+            The lookahead this deployment relies on. Omitted, it defaults to
+            ``tube.requested_horizon`` -- you propagated K control boxes, so
+            you are taken to need K steps. Pass an explicit ``int`` to require
+            fewer, or an explicit ``None`` to accept whatever the tube achieved
+            (best effort, recorded in :meth:`justification` so the weaker claim
+            is visible in the audit log rather than implied by silence).
+        """
+        if required_horizon is _REQUIRE_REQUESTED:
+            required_horizon = tube.requested_horizon
+
+        if required_horizon is not None:
+            if int(required_horizon) != required_horizon or required_horizon < 1:
+                raise ValueError(
+                    f"required_horizon must be a positive whole number of "
+                    f"steps; got {required_horizon!r}. Pass None to accept the "
+                    f"achieved horizon instead of a non-positive requirement."
+                )
+            required_horizon = int(required_horizon)
+            if required_horizon > tube.requested_horizon:
+                raise HorizonTooShort(
+                    f"this witness is declared to need {required_horizon} "
+                    f"steps of lookahead, but the tube was only propagated for "
+                    f"{tube.requested_horizon} (that many control boxes were "
+                    f"supplied), so the requirement is unreachable by "
+                    f"construction. Propagate the tube over the horizon the "
+                    f"deployment actually needs."
+                )
+            if tube.horizon < required_horizon:
+                raise HorizonTooShort(
+                    f"this witness is declared to need {required_horizon} "
+                    f"steps of lookahead; the tube certifies {tube.horizon}. "
+                    f"{tube.cover_exit_reason or 'The tube fell short of the requirement.'} "
+                    f"A witness built on it would score over t <= "
+                    f"{tube.horizon} while presenting the K-step guarantee. "
+                    f"Shrink the requirement, widen the certified cover, or "
+                    f"re-certify over a domain the tube stays inside."
+                )
+
         clearance_lo = clearance_lower_bounds(tube, clearance_batched)
-        return cls(tube=tube, clearance_lo=clearance_lo, c_required=float(c_required))
+        return cls(
+            tube=tube,
+            clearance_lo=clearance_lo,
+            c_required=float(c_required),
+            required_horizon=required_horizon,
+        )
 
     # -- SoundnessWitness protocol ------------------------------------------- #
 
@@ -121,11 +200,17 @@ class PredictiveTubeWitness:
         return 0.0
 
     def justification(self) -> str:
+        declared = (
+            "best effort (no horizon requirement declared)"
+            if self.required_horizon is None
+            else f"declared requirement {self.required_horizon}, met"
+        )
         return (
             f"score s = max_t(c_required - lo(IA[h](X_t))) over t <= "
-            f"K={self.tube.horizon} (requested {self.tube.requested_horizon}); "
-            f"s <= 0 implies true clearance >= {self.c_required:g} for every "
-            f"t <= K, so silence is sound over the whole certified horizon"
+            f"K={self.tube.horizon} (requested {self.tube.requested_horizon}; "
+            f"{declared}); s <= 0 implies true clearance >= "
+            f"{self.c_required:g} for every t <= K, so silence is sound over "
+            f"the whole certified horizon"
         )
 
     def miss_probability(self, threshold: float) -> float:

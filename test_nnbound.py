@@ -21,6 +21,7 @@ import pytest
 
 from certabstain import (
     EnclosureError,
+    NonFiniteEnclosure,
     Interval,
     MLP,
     crown_bounds,
@@ -199,7 +200,7 @@ def test_tanh_requires_experimental_flag() -> None:
 
 
 def test_network_construction_refusals() -> None:
-    with pytest.raises(EnclosureError, match="non-finite"):
+    with pytest.raises(NonFiniteEnclosure, match="non-finite"):
         MLP(((np.array([[np.nan]]), np.zeros(1)),))
     with pytest.raises(ValueError, match="input width"):
         MLP(

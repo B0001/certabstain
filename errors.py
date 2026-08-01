@@ -109,6 +109,35 @@ class EnclosureError(CertAbstainError):
     """
 
 
+class ModeIndeterminate(EnclosureError):
+    """A box does not certifiably lie inside the declared operating mode.
+
+    Spec section 7 item 3. Kept distinct from the other enclosure failures
+    because the remedy is distinct: split the domain at the motion cone, or
+    certify per mode. Nothing is numerically wrong here -- the arithmetic is
+    fine and the box is simply straddling a discontinuity the certificate
+    never declared.
+
+    Subclasses :class:`EnclosureError`, so existing handlers that catch the
+    broader class keep working.
+    """
+
+
+class NonFiniteEnclosure(EnclosureError):
+    """A bound went non-finite somewhere on the certification path.
+
+    Spec section 7 item 9. Covers non-finite endpoints, non-finite model or
+    network parameters, and an operation whose result crossed the float64
+    ceiling under outward rounding: in every case an endpoint is no longer a
+    real number, so the enclosure would be vacuous rather than wrong. The
+    remedy is to shrink the boxes or fix the upstream value, which is why this
+    is worth telling apart from :class:`ModeIndeterminate`.
+
+    Subclasses :class:`EnclosureError`, so existing handlers that catch the
+    broader class keep working.
+    """
+
+
 class EnvironmentUnsound(CertAbstainError):
     """The floating-point environment failed the rounding self-test.
 
@@ -142,6 +171,19 @@ class CoverTooSmall(CertAbstainError):
     cover and the gate abstains outside it -- but a certificate quietly
     covering a sliver of the intended envelope must not ship. The caller
     declares the minimum; this refusal enforces it.
+    """
+
+
+class HorizonTooShort(CertAbstainError):
+    """The certified horizon fell below the horizon the deployment declared.
+
+    Spec section 7.8 has two halves. A tube that leaves the certified cover
+    early shrinks its *horizon*, never its claim -- that half is
+    ``TubeResult.horizon`` plus ``cover_exit_reason``. But a caller that
+    declared it needs K steps of lookahead and received fewer has not got the
+    guarantee it asked for, and a truncated ``TubeResult`` is a value it can
+    ignore. Declaring ``required_horizon`` converts that shortfall from a
+    field the caller may overlook into a refusal it cannot.
     """
 
 

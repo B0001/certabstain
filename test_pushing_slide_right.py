@@ -43,6 +43,9 @@ rational map that a tiny (3, 8, 1) net fits tightly.
 
 from __future__ import annotations
 
+import json
+import os
+
 import numpy as np
 import pytest
 
@@ -285,3 +288,192 @@ def test_abstention_rate_meets_the_2alpha_bar() -> None:
         f"required to clear it, but this assertion documents the finding "
         f"honestly instead of silently omitting the check"
     )
+
+
+# ===================================================================== #
+# Report artifact
+# ===================================================================== #
+
+
+def _net_and_cert_seeded(data_seed: int, fit_seed: int):
+    """Same construction as _net_and_cert, with the data/fit seeds exposed.
+
+    Used to check that this mode's pass is not a single-seed artifact -- and,
+    unlike a prose note recording numbers from a run nobody can re-execute,
+    to put the second seed's actual figures in the report artifact.
+    """
+    rng = np.random.default_rng(data_seed)
+    X = rng.uniform(DOMAIN.lo, DOMAIN.hi, size=(120_000, 3))
+    Y = _h_next_float(X)
+    net = fit_mlp((3, 8, 1), X, Y, steps=12_000, lr=2e-3, seed=fit_seed)
+    train_mae = float(np.mean(np.abs(net.forward(X).reshape(-1) - Y.reshape(-1))))
+    cert = certify_epsilon(
+        net,
+        _h_next_ref,
+        DOMAIN,
+        reference_id=REFERENCE_ID,
+        ref_float=_h_next_float,
+        target=None,
+        max_leaf_evals=300_000,
+        mode=_slide_right_mode,
+        mode_float=_slide_right_mode_float,
+        floor_samples=300_000,
+    )
+    return net, cert, train_mae
+
+
+def _abstention_rate(net, cert) -> tuple[float, float]:
+    w = VerifiedDiscrepancyWitness.bind(cert, net, REFERENCE_ID)
+    rng = np.random.default_rng(101)
+    cal = [_rollout(rng, net, w, HORIZON) for _ in range(N_CAL)]
+    mon = build_monitor(
+        nominal_trajectories=cal, alpha=ALPHA, witness=w, safe_action="STOP"
+    )
+    ev = [_rollout(rng, net, w, HORIZON) for _ in range(N_EVAL)]
+    rate = sum(1 for t in ev if any(s > mon.threshold for s in t)) / N_EVAL
+    return rate, float(mon.threshold)
+
+
+def test_write_report_artifact() -> None:
+    """Write this mode's report, every number computed here rather than typed.
+
+    The other two modes' tests each end by dumping their own report; this one
+    did not, so `artifacts/pushing_slide_right_report.json` was the one M6
+    artifact with no code that produces it -- which the technical note's
+    'every quantitative claim traces to an artifact' promise cannot survive.
+    """
+    net, cert, train_mae = _net_and_cert_seeded(7, 0)
+
+    rng = np.random.default_rng(3)
+    sample_pts = rng.uniform(DOMAIN.lo, DOMAIN.hi, size=(200_000, 3))
+    frac_in_mode = float(_slide_right_mode_float(sample_pts).mean())
+    h_next_min = float(np.min(_h_next_float(sample_pts)))
+
+    abstention_rate, threshold = _abstention_rate(net, cert)
+
+    eps = float(cert.eps[0])
+    floor = float(cert.empirical_floor[0])
+    meets_bar = bool(abstention_rate <= 2 * ALPHA)
+
+    # The second-seed check, actually run: the claim "not a single-seed fluke"
+    # is only worth making if the numbers behind it are reproducible.
+    net2, cert2, train_mae2 = _net_and_cert_seeded(23, 11)
+    abstention_rate2, _ = _abstention_rate(net2, cert2)
+
+    report = {
+        "milestone": "M6 - Planar pushing scale-up",
+        "workstream": "PusherSlider slide_right mode",
+        "mode": "slide_right",
+        "reference_model": P.reference_id(),
+        "reference_id": REFERENCE_ID,
+        "reduction": (
+            "one-step (py, vpx, vpy) -> py2 subsystem; x, y, theta never "
+            "enter _slide_body or the py-Euler-step in _integrate, so the "
+            "full 6-D (state, control) map is not certified -- only this "
+            "exact self-contained 3-input/1-output slice"
+        ),
+        "clearance_spec": (
+            "h_next(py, vpx, vpy) = py_max - |py2(py, vpx, vpy)| (positive = "
+            "still on the contact face after one slide_right step); py2 from "
+            "step_interval component index 3"
+        ),
+        "domain": {
+            "py": [float(DOMAIN.lo[0]), float(DOMAIN.hi[0])],
+            "vpx": [float(DOMAIN.lo[1]), float(DOMAIN.hi[1])],
+            "vpy": [float(DOMAIN.lo[2]), float(DOMAIN.hi[2])],
+            "fraction_in_slide_right_by_sample": frac_in_mode,
+            "sampled_min_h_next": h_next_min,
+            "note": (
+                "box-level mode membership for the certifier is handled "
+                "exactly (not by resampling) via _slide_right_mode passed as "
+                "certify_epsilon's `mode` argument; the sampled fraction "
+                "above is a diagnostic only"
+            ),
+        },
+        "net_architecture": [3, 8, 1],
+        "training": {
+            "steps": 12000,
+            "lr": 0.002,
+            "n_train_samples": 120000,
+            "data_seed": 7,
+            "fit_seed": 0,
+            "train_mae": train_mae,
+        },
+        "certifier": {
+            "max_leaf_evals": 300000,
+            "floor_samples": 300000,
+            "n_leaf_evals_used": int(cert.n_leaf_evals),
+            "n_leaves": int(cert.n_leaves),
+            "cover_fraction": float(cert.cover_fraction),
+            "eps": eps,
+            "empirical_floor": floor,
+            "eps_to_floor_ratio": eps / floor,
+        },
+        "monitor": {
+            "alpha": ALPHA,
+            "two_alpha_bar": 2 * ALPHA,
+            "n_calibration_rollouts": N_CAL,
+            "n_eval_rollouts": N_EVAL,
+            "horizon_per_rollout": HORIZON,
+            "calibration_threshold": threshold,
+            "measured_abstention_rate": abstention_rate,
+        },
+        "second_seed_check": {
+            "purpose": (
+                "the pass on this mode should not depend on one lucky fit; "
+                "these are the actual figures from a different data/fit seed"
+            ),
+            "data_seed": 23,
+            "fit_seed": 11,
+            "train_mae": train_mae2,
+            "eps": float(cert2.eps[0]),
+            "empirical_floor": float(cert2.empirical_floor[0]),
+            "cover_fraction": float(cert2.cover_fraction),
+            "measured_abstention_rate": abstention_rate2,
+            "still_meets_bar": bool(abstention_rate2 <= 2 * ALPHA),
+        },
+        "verdict": {
+            "meets_M6_bar": meets_bar,
+            "reason": (
+                f"measured_abstention_rate ({abstention_rate:.4g}) "
+                f"{'<=' if meets_bar else '>'} 2*alpha ({2 * ALPHA:.3g}); "
+                f"cover_fraction ({cert.cover_fraction:.1%}) against the 90% "
+                f"declared minimum; eps ({eps:.3g}) is a small fraction of "
+                f"py_max (0.04) and within {eps / floor:.2f}x of the sampled "
+                f"empirical floor, so the certificate is tight rather than "
+                f"vacuous"
+            ),
+        },
+        "notes": [
+            "Spec section 6 only requires the 2*alpha nominal-abstention bar "
+            "on the sticking mode; slide_right clearing it as well is a bonus "
+            "finding for this mode, not a forced result -- no domain shrinkage "
+            "or budget inflation beyond the first reasonable choice was needed.",
+            "h_next stays comfortably positive across the whole declared "
+            "domain (see domain.sampled_min_h_next), well clear of the "
+            "py_max=0.04 unsafe-at-zero boundary: the pusher never comes close "
+            "to sliding the contact off the face in one step at these vpx/vpy "
+            "magnitudes, so this is not a stiff or discontinuity-adjacent "
+            "regime the way stick's pydot=0-vs-nonzero boundary can be.",
+            "The domain fraction outside slide_right by sample is what "
+            "certify_epsilon's box-level `mode` argument excludes from the "
+            "cover (mode-straddling leaves near the motion-cone boundary get "
+            "shrunk to min_width and dropped, per spec section 5's 'fails to a "
+            "smaller domain, never a weaker claim'); this is the entire gap "
+            "between 100% and the reported cover_fraction.",
+            "No dependency was needed beyond what M3/M5 already established: "
+            "certify_epsilon's own `mode`/`mode_float` arguments handle A2 "
+            "(mode membership) exactly, and step_interval's certified py2 "
+            "enclosure was reused directly for the interval twin of h_next "
+            "rather than hand-deriving an interval form of _slide_body.",
+        ],
+    }
+
+    out_dir = os.path.join(os.path.dirname(__file__), "artifacts")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "pushing_slide_right_report.json")
+    with open(out_path, "w") as f:
+        json.dump(report, f, indent=2)
+
+    assert os.path.exists(out_path)
+    assert meets_bar, report["verdict"]["reason"]
