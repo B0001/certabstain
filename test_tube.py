@@ -393,7 +393,7 @@ def test_tube_refuses_a_nonsensical_required_horizon() -> None:
     net, twin, cert = _dim4_control_cert()
     X0 = Interval(-0.01 * np.ones(4), 0.01 * np.ones(4))
     ok_control = Interval(np.array([-0.01]), np.array([0.01]))
-    for bad in (0, -3, 2.5):
+    for bad in (0, -3, 2.5, True, False):
         with pytest.raises(ValueError, match="positive whole number"):
             propagate_tube(
                 net, cert, X0, [ok_control] * 3, n_states=4, required_horizon=bad

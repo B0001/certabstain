@@ -142,7 +142,11 @@ def propagate_tube(
         # 0 and negatives would satisfy `horizon < required_horizon` nowhere
         # and silently behave as None -- a caller computing `k - 1` and landing
         # on 0 would get no refusal at all.
-        if int(required_horizon) != required_horizon or required_horizon < 1:
+        if (
+            isinstance(required_horizon, bool)   # bool is an int; True is not a horizon
+            or int(required_horizon) != required_horizon
+            or required_horizon < 1
+        ):
             raise ValueError(
                 f"required_horizon must be a positive whole number of steps; "
                 f"got {required_horizon!r}. Pass None for the shrink-and-report "

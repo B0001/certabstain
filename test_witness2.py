@@ -305,7 +305,7 @@ def test_witness_refuses_a_requirement_longer_than_the_tube_was_propagated() -> 
 def test_witness_refuses_a_nonsensical_requirement() -> None:
     tube = _yv_tube()
     clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
-    for bad in (0, -2, 3.5):
+    for bad in (0, -2, 3.5, True, False):
         with pytest.raises(ValueError, match="positive whole number"):
             PredictiveTubeWitness.build(
                 tube, clear.interval_batch, c_required=-5.0, required_horizon=bad

@@ -159,7 +159,15 @@ class PredictiveTubeWitness:
             required_horizon = tube.requested_horizon
 
         if required_horizon is not None:
-            if int(required_horizon) != required_horizon or required_horizon < 1:
+            # `bool` is an `int` in Python, so `required_horizon=True` would
+            # otherwise read as "yes, require it" and quietly mean 1 -- the
+            # weakest requirement there is, and near enough to the unsafe
+            # default this argument exists to remove.
+            if (
+                isinstance(required_horizon, bool)
+                or int(required_horizon) != required_horizon
+                or required_horizon < 1
+            ):
                 raise ValueError(
                     f"required_horizon must be a positive whole number of "
                     f"steps; got {required_horizon!r}. Pass None to accept the "
