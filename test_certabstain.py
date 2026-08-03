@@ -124,6 +124,25 @@ def test_refuses_shift_budget_at_or_above_alpha() -> None:
     assert robust_level(alpha=0.05, rho=0.02) == pytest.approx(0.03)
 
 
+def test_refuses_a_non_finite_shift_budget() -> None:
+    """A nan budget is not a loose budget, it is no budget.
+
+    Both guards in robust_level are comparisons -- `rho < 0.0` and
+    `rho >= alpha` -- and both are False for nan, so a nan sailed through and
+    returned `alpha - nan` = nan. Via build_monitor that nan did eventually
+    raise, but from _check_alpha inside the calibrator, blaming `alpha` for a
+    bad shift_budget. Called directly, robust_level just returned nan.
+    """
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="finite"):
+            robust_level(alpha=0.05, rho=bad)
+
+    # the real budgets still behave
+    assert robust_level(alpha=0.05, rho=0.02) == pytest.approx(0.03)
+    with pytest.raises(ShiftBudgetExceeded):
+        robust_level(alpha=0.05, rho=0.05)
+
+
 def test_refuses_two_sided_without_witness() -> None:
     with pytest.raises(SoundnessNotEstablished, match="no soundness witness"):
         build_monitor(

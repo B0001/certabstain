@@ -20,11 +20,13 @@ import numpy as np
 import pytest
 
 from certabstain import (
+    EnclosureError,
     EpsilonCertificate,
     HorizonTooShort,
     Interval,
     MLP,
     NetworkCertificateMismatch,
+    NonFiniteEnclosure,
     clearance_lower_bounds,
     cover_contains_box,
     propagate_tube,
@@ -384,6 +386,54 @@ def test_tube_acceptance_spring_damper() -> None:
     lo_bounds = clearance_lower_bounds(tube, clear.interval_batch)
     assert lo_bounds.shape == (K + 1,)
     assert np.all(np.isfinite(lo_bounds))
+
+
+def test_clearance_lower_bounds_validates_the_callers_enclosure() -> None:
+    """A certifier does not get to assume its caller's enclosure.
+
+    Same lesson as _ref_enclosure in discrepancy.py, on the path that fix did
+    not reach: clearance_lower_bounds discarded the returned upper end
+    outright (`clo, _`), so ordering went unchecked, and it squeezed with
+    `[:, 0]`, so extra channels were dropped in silence.
+
+    Ordering is the one that matters. W2 scores s = max_t(c_required - clo), so
+    an overstated clo makes the clearance look larger, the score smaller, and
+    the gate stays silent on a clearance it never established.
+    """
+    net, twin, cert = _dim4_control_cert()
+    X0 = Interval(-0.01 * np.ones(4), 0.01 * np.ones(4))
+    control = Interval(np.array([-0.01]), np.array([0.01]))
+    tube = propagate_tube(net, cert, X0, [control] * 3, n_states=4)
+    n = tube.horizon + 1
+
+    def inverted(lo, hi):
+        return np.ones((lo.shape[0], 1)), np.zeros((lo.shape[0], 1))
+
+    def non_finite(lo, hi):
+        return np.full((lo.shape[0], 1), -np.inf), np.zeros((lo.shape[0], 1))
+
+    def three_channels(lo, hi):
+        b = lo.shape[0]
+        return np.zeros((b, 3)), np.ones((b, 3))
+
+    with pytest.raises(EnclosureError, match="inverted"):
+        clearance_lower_bounds(tube, inverted)
+    with pytest.raises(NonFiniteEnclosure):
+        clearance_lower_bounds(tube, non_finite)
+    with pytest.raises(EnclosureError, match="one clearance channel"):
+        clearance_lower_bounds(tube, three_channels)
+
+    # a well-formed clearance still works, in both accepted shapes
+    def flat(lo, hi):
+        return np.zeros(lo.shape[0]), np.ones(lo.shape[0])
+
+    def column(lo, hi):
+        return np.zeros((lo.shape[0], 1)), np.ones((lo.shape[0], 1))
+
+    for good in (flat, column):
+        out = clearance_lower_bounds(tube, good)
+        assert out.shape == (n,)
+        assert np.all(out == 0.0)
 
 
 def test_tube_refuses_a_nonsensical_required_horizon() -> None:

@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: certabstain-prod
+nameSuffix: -prod
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: prod
+    includeSelectors: false
+
+patches:
+  - path: prod-patch.yaml
+    target:
+      kind: Job
+
+images:
+  - name: certabstain
+    newTag: 0.1.0

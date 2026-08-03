@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: certabstain-artifacts
+spec:
+  accessModes:
+    # ReadWriteOnce. The three sweep Jobs each write disjoint filenames
+    # (scaling_study.*, tube_sweep.*, stiffness_sweep.*) into this one claim,
+    # so run them sequentially -- RWO cannot attach to pods on different nodes,
+    # and two Jobs scheduled to different nodes would leave one Pending.
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Output is JSON summaries plus a PNG per sweep -- megabytes. 1Gi is the
+      # smallest most dynamic provisioners will grant.
+      storage: 1Gi

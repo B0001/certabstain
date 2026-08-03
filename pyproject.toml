@@ -8,6 +8,15 @@ dependencies = [
     "numpy>=2.2.6",
 ]
 
+# This repo directory is itself the `certabstain` package -- there is an
+# __init__.py at the root and imports resolve as `certabstain.vnnlib` with the
+# parent directory on the path. Without this, setuptools' flat-layout discovery
+# sees `artifacts/` and `k8s/` as competing top-level packages and refuses to
+# build at all. Naming the one real package excludes them.
+[tool.setuptools]
+packages = ["certabstain"]
+package-dir = { certabstain = "." }
+
 [dependency-groups]
 dev = [
     "matplotlib>=3.9",

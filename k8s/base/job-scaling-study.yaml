@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: certabstain-scaling-study
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        # Makes the kubelet chown the PVC to gid 10001 so the non-root sweep
+        # can write artifacts on a freshly provisioned volume.
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sweep
+          image: certabstain:0.1.0
+          imagePullPolicy: IfNotPresent
+          # ENTRYPOINT is `python`. -m is required: the scripts live inside the
+          # certabstain package and import it by name, so running the file path
+          # directly would not resolve those imports.
+          args: ["-m", "certabstain.scaling_study"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              # Single-process and numpy-bound; the image pins BLAS to 1 thread,
+              # so more than one core would idle.
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "1"
+              memory: 4Gi
+          volumeMounts:
+            - name: artifacts
+              # Matches Path(__file__).parent / "artifacts" inside the image.
+              mountPath: /app/certabstain/artifacts
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: certabstain-artifacts
+        # readOnlyRootFilesystem still needs a writable /tmp -- MPLCONFIGDIR
+        # points here, and matplotlib warns on every import without it.
+        - name: tmp
+          emptyDir: {}

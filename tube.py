@@ -38,7 +38,12 @@ from typing import Callable
 import numpy as np
 
 from .discrepancy import EpsilonCertificate
-from .errors import EnclosureError, HorizonTooShort, NetworkCertificateMismatch
+from .errors import (
+    EnclosureError,
+    HorizonTooShort,
+    NetworkCertificateMismatch,
+    NonFiniteEnclosure,
+)
 from .interval import Interval, require_sound_environment
 from .nnbound import MLP, crown_bounds, jacobian_bounds
 
@@ -91,6 +96,12 @@ class TubeResult:
     horizon: int
     requested_horizon: int
     cover_exit_reason: str | None
+    # The dynamics reference the whole chain was certified against, carried
+    # forward from the certificate. propagate_tube enforces the network binding
+    # (spec A4) but the reference binding (spec A1) had nowhere to survive: the
+    # tube dropped it, so a W2 witness built downstream could not name -- let
+    # alone check -- which reference its guarantee rests on.
+    reference_id: str
 
 
 def propagate_tube(
@@ -249,6 +260,7 @@ def propagate_tube(
         horizon=horizon,
         requested_horizon=K,
         cover_exit_reason=exit_reason,
+        reference_id=cert.reference_id,
     )
 
 
@@ -267,6 +279,46 @@ def clearance_lower_bounds(
     """
     lo = np.stack([b.lo for b in tube.boxes])
     hi = np.stack([b.hi for b in tube.boxes])
-    clo, _ = clearance_batched(lo, hi)
+    clo, chi = clearance_batched(lo, hi)
     clo = np.asarray(clo, dtype=np.float64)
-    return clo.reshape(lo.shape[0], -1)[:, 0]
+    chi = np.asarray(chi, dtype=np.float64)
+
+    # Same lesson as _ref_enclosure in discrepancy.py, on the path that fix did
+    # not reach: this is a certifier, so it does not get to assume its caller's
+    # enclosure. The returned upper end used to be discarded outright (`clo, _`),
+    # which is what let the ordering go unchecked.
+    #
+    # Ordering is the one that matters. W2 scores s = max_t(c_required - clo),
+    # so an overstated clo makes the clearance look *larger*, the score
+    # *smaller*, and the gate stays silent -- unsound in the dangerous
+    # direction, and silent about it.
+    want = (lo.shape[0],)
+    if clo.shape != chi.shape:
+        raise EnclosureError(
+            f"clearance returned mismatched shapes {clo.shape}/{chi.shape}"
+        )
+    # (B,) and (B, 1) are both a single clearance channel and both fine; more
+    # than one channel is not. Squeezing it silently took column 0, certifying
+    # against one obstacle while the caller believed every channel was covered.
+    # Reduce several obstacles to a single min-clearance before calling here --
+    # a certifier should not guess which channel was meant.
+    squeezed = clo.reshape(clo.shape[0], -1) if clo.ndim > 1 else clo[:, None]
+    if clo.shape[0] != want[0] or squeezed.shape[1] != 1:
+        raise EnclosureError(
+            f"clearance returned shape {clo.shape} for {want[0]} tube steps; "
+            "this needs exactly one clearance channel per step. Several "
+            "channels were silently reduced to the first one, certifying "
+            "against a single obstacle. Pass the min over obstacles instead."
+        )
+    if not (np.all(np.isfinite(clo)) and np.all(np.isfinite(chi))):
+        raise NonFiniteEnclosure(
+            "clearance enclosure is not finite over the tube; a non-finite "
+            "lower bound scores as unbounded safety"
+        )
+    if np.any(clo > chi):
+        raise EnclosureError(
+            "clearance returned an inverted interval (lo > hi) on at least one "
+            "tube step. An overstated lower bound shrinks the W2 score, so the "
+            "gate would stay silent on a clearance it never established."
+        )
+    return squeezed[:, 0]

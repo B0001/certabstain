@@ -122,6 +122,35 @@ def test_target_below_floor_forces_reporting_refusal() -> None:
     assert "achieved" in msg and "worst leaf" in msg and "empirical floor" in msg
 
 
+def test_refuses_a_non_finite_target_or_min_cover_fraction() -> None:
+    """nan requirements silently disable the refusals they exist to trigger.
+
+    `float(eps.max()) > nan` and `cover_fraction < nan` are both False, so
+    neither TargetNotCertified nor CoverTooSmall could ever fire. target=nan
+    was the worse of the two: the same comparison drives refinement, so
+    `umax > nan` marked nothing refinable and the search stopped at the crude
+    initial bound. Measured on a net that certifies to eps=0.048 with
+    target=None, target=nan minted a certificate at eps=2.94 -- 60x weaker,
+    and recorded as having met its target.
+    """
+    def run(**kw):
+        kw.setdefault("target", None)
+        return certify_epsilon(
+            NET, CLEAR.interval_batch, DOMAIN,
+            reference_id=CLEAR.reference_id(), max_leaf_evals=20_000, **kw
+        )
+
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="target must be a finite"):
+            run(target=bad)
+        with pytest.raises(ValueError, match="min_cover_fraction must be a finite"):
+            run(min_cover_fraction=bad)
+
+    # a real target and a real minimum still work
+    cert = run(target=10.0, min_cover_fraction=0.5)
+    assert float(cert.eps.max()) <= 10.0
+
+
 # ===================================================================== #
 # Exactness: certified eps must bracket a KNOWN sup-gap (input dim 4)
 # ===================================================================== #
@@ -297,6 +326,58 @@ def test_certificate_refuses_a_non_finite_epsilon() -> None:
             cover_lo=np.zeros((1, 2)), cover_hi=np.ones((1, 2)),
             cover_fraction=1.0, net_hash="x", reference_id="x",
             empirical_floor=np.zeros(1), n_leaf_evals=0, n_leaves=1, target=None,
+        )
+
+
+def test_refuses_a_reference_that_returns_an_inverted_interval() -> None:
+    """An empty reference interval shrinks the bound instead of widening it.
+
+    This is the one unsound direction: with ``rlo > rhi`` both ``nhi - rlo``
+    and ``rhi - nlo`` get *smaller*, so the certifier would mint a too-small
+    eps and claim more than it verified. Nothing downstream would notice --
+    the value is finite, correctly shaped, and monotone-looking. The refusal
+    is an EnclosureError but specifically not the non-finite subclass, so a
+    caller can tell "your reference is broken" from "shrink your boxes".
+    """
+
+    def inverted_ref(lo, hi):
+        n = lo.shape[0]
+        return np.ones((n, 1)), np.zeros((n, 1))  # finite, right shape, lo > hi
+
+    with pytest.raises(EnclosureError, match="inverted") as exc:
+        certify_epsilon(
+            NET,
+            inverted_ref,
+            DOMAIN,
+            reference_id="inverted reference",
+            target=None,
+            max_leaf_evals=1_000,
+        )
+    assert not isinstance(exc.value, NonFiniteEnclosure)
+
+
+def test_refuses_a_reference_whose_shape_would_broadcast() -> None:
+    """A (B, 1) return against a multi-output net is silently wrong.
+
+    NumPy broadcasts it across every output dimension, so all outputs get
+    certified against one reference channel and the certificate covers
+    dimensions the reference never described. Shape is checked rather than
+    trusted, because broadcasting fails open here.
+    """
+    net = MLP.random((2, 8, 3), activation="relu", rng=np.random.default_rng(0))
+
+    def one_channel_ref(lo, hi):
+        n = lo.shape[0]
+        return np.zeros((n, 1)), np.ones((n, 1))  # would broadcast to (n, 3)
+
+    with pytest.raises(EnclosureError, match="shape"):
+        certify_epsilon(
+            net,
+            one_channel_ref,
+            DOMAIN,
+            reference_id="single-channel reference against 3 outputs",
+            target=None,
+            max_leaf_evals=1_000,
         )
 
 

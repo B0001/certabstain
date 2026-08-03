@@ -326,6 +326,17 @@ def robust_level(alpha: float, rho: float, *, divergence: str = "tv") -> float:
     rather than a threshold that quietly no longer means what it says.
     """
     _check_alpha(alpha)
+    # `rho < 0.0` and `rho >= alpha` are both False for nan, so a nan budget
+    # slipped past every guard here and returned `alpha - nan` = nan. Reaching
+    # build_monitor that nan did eventually raise, but from _check_alpha inside
+    # the calibrator -- blaming `alpha` for a bad `shift_budget`. Called
+    # directly, robust_level just handed back nan.
+    if not math.isfinite(rho):
+        raise ValueError(
+            f"rho must be a finite number; got {rho!r}. A non-finite shift "
+            "budget passes the ShiftBudgetExceeded check (every comparison "
+            "against nan is False) and poisons the calibration level instead."
+        )
     if rho < 0.0:
         raise ValueError(f"rho must be non-negative; got {rho!r}")
     if rho == 0.0:

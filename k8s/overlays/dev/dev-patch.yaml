@@ -1,0 +1,26 @@
+# JSON 6902 rather than a strategic merge patch: this one patch applies to all
+# three sweep Jobs via `target: kind: Job`, and a merge patch would need a
+# metadata.name that can only match one of them.
+- op: replace
+  path: /spec/template/spec/containers/0/imagePullPolicy
+  value: Always
+# Dev sweeps are a smoke check that the image runs and can write the PVC, not a
+# real study -- so cap the runtime and halve the footprint.
+- op: add
+  path: /spec/activeDeadlineSeconds
+  value: 1800
+- op: replace
+  path: /spec/backoffLimit
+  value: 1
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/cpu
+  value: 500m
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/memory
+  value: 1Gi
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/cpu
+  value: "1"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/memory
+  value: 2Gi
