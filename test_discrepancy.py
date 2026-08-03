@@ -122,6 +122,35 @@ def test_target_below_floor_forces_reporting_refusal() -> None:
     assert "achieved" in msg and "worst leaf" in msg and "empirical floor" in msg
 
 
+def test_refuses_a_non_finite_target_or_min_cover_fraction() -> None:
+    """nan requirements silently disable the refusals they exist to trigger.
+
+    `float(eps.max()) > nan` and `cover_fraction < nan` are both False, so
+    neither TargetNotCertified nor CoverTooSmall could ever fire. target=nan
+    was the worse of the two: the same comparison drives refinement, so
+    `umax > nan` marked nothing refinable and the search stopped at the crude
+    initial bound. Measured on a net that certifies to eps=0.048 with
+    target=None, target=nan minted a certificate at eps=2.94 -- 60x weaker,
+    and recorded as having met its target.
+    """
+    def run(**kw):
+        kw.setdefault("target", None)
+        return certify_epsilon(
+            NET, CLEAR.interval_batch, DOMAIN,
+            reference_id=CLEAR.reference_id(), max_leaf_evals=20_000, **kw
+        )
+
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="target must be a finite"):
+            run(target=bad)
+        with pytest.raises(ValueError, match="min_cover_fraction must be a finite"):
+            run(min_cover_fraction=bad)
+
+    # a real target and a real minimum still work
+    cert = run(target=10.0, min_cover_fraction=0.5)
+    assert float(cert.eps.max()) <= 10.0
+
+
 # ===================================================================== #
 # Exactness: certified eps must bracket a KNOWN sup-gap (input dim 4)
 # ===================================================================== #

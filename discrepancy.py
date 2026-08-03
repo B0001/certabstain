@@ -291,6 +291,29 @@ def certify_epsilon(
     ``min_cover_fraction`` of the domain certified.
     """
     require_sound_environment()
+
+    # A `nan` requirement is not a loose requirement, it is no requirement: every
+    # comparison against it is False, so the refusal it exists to trigger can
+    # never fire. `target=nan` was the worse of the two, because the same
+    # comparison drives refinement -- `umax > nan` marks nothing refinable, so
+    # the search stops at the crude initial bound. On a net certifying to
+    # eps=0.048 with target=None, target=nan minted a certificate at eps=2.94:
+    # 60x weaker, recorded as having met its target. Callers computing a target
+    # from data (a ratio, a fitted quantile) are exactly who hits this.
+    if target is not None and not np.isfinite(target):
+        raise ValueError(
+            f"target must be a finite number; got {target!r}. A non-finite "
+            "target silently disables both the TargetNotCertified refusal and "
+            "the refinement it drives, yielding a weaker certificate that "
+            "claims to have met it. Pass None to certify without a target."
+        )
+    if not np.isfinite(min_cover_fraction):
+        raise ValueError(
+            f"min_cover_fraction must be a finite number; got "
+            f"{min_cover_fraction!r}. A non-finite minimum can never be "
+            "violated, so CoverTooSmall would never fire."
+        )
+
     dlo = np.asarray(domain.lo, dtype=np.float64)
     dhi = np.asarray(domain.hi, dtype=np.float64)
     if dlo.ndim != 1 or dlo.shape[0] != net.n_inputs:
