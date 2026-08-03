@@ -182,6 +182,59 @@ def test_predictive_tube_witness_score_and_composition() -> None:
     assert claim.miss_bound == 0.0
 
 
+def test_w2_justification_names_both_references_spec_a1() -> None:
+    """W1 names the reference it was proven against; W2 named neither.
+
+    Two witnesses built on the same tube against completely different obstacle
+    geometries produced byte-identical justification strings -- the audit log
+    could not tell which geometry the clearance claim was proved for, and the
+    dynamics reference was dropped by TubeResult before the witness could see
+    it. propagate_tube enforces the network binding (A4); the reference binding
+    (A1) had nowhere to survive on this path.
+    """
+    tube = _yv_tube()
+
+    near = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
+    far = CircleClearance(ox=3.0, oy=-42.0, r=1.25)   # a different obstacle
+    w_near = PredictiveTubeWitness.build(tube, near.interval_batch, -5.0)
+    w_far = PredictiveTubeWitness.build(tube, far.interval_batch, -5.0)
+
+    assert w_near.justification() != w_far.justification(), (
+        "two different obstacle geometries must not produce the same audit string"
+    )
+    assert near.reference_id() in w_near.justification()
+    assert far.reference_id() in w_far.justification()
+
+    # the dynamics reference the tube was certified against is named too
+    assert tube.reference_id in w_near.justification()
+    assert "SpringDamper2D" in w_near.justification()
+
+
+def test_w2_records_an_anonymous_clearance_as_undeclared() -> None:
+    """A bare function has no identity; say so rather than imply one.
+
+    Same idiom the horizon already uses -- ``required_horizon=None`` reads as
+    "best effort (no horizon requirement declared)" rather than passing for a
+    met requirement. An unnamed geometry must not read as a named one.
+    """
+    tube = _yv_tube()
+    clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)
+
+    anon = PredictiveTubeWitness.build(
+        tube, lambda lo, hi: clear.interval_batch(lo, hi), -5.0
+    )
+    assert anon.clearance_id is None
+    assert "undeclared clearance geometry" in anon.justification()
+
+    # ...and a caller passing a plain function can still declare one
+    named = PredictiveTubeWitness.build(
+        tube, lambda lo, hi: clear.interval_batch(lo, hi), -5.0,
+        clearance_id="hand-rolled clearance v3",
+    )
+    assert "hand-rolled clearance v3" in named.justification()
+    assert "undeclared" not in named.justification()
+
+
 def test_predictive_tube_witness_covers_the_certified_boxes_only() -> None:
     tube = _yv_tube()
     clear = CircleClearance(ox=0.0, oy=-10.0, r=0.05)

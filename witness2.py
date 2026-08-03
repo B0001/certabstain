@@ -133,6 +133,7 @@ class PredictiveTubeWitness:
     clearance_lo: np.ndarray
     c_required: float
     required_horizon: int | None
+    clearance_id: str | None
 
     @classmethod
     def build(
@@ -142,6 +143,7 @@ class PredictiveTubeWitness:
         c_required: float,
         *,
         required_horizon: int | None = _REQUIRE_REQUESTED,  # type: ignore[assignment]
+        clearance_id: str | None = None,
     ) -> "PredictiveTubeWitness":
         """Build the witness, or refuse if the tube is shorter than declared.
 
@@ -194,12 +196,32 @@ class PredictiveTubeWitness:
                     f"re-certify over a domain the tube stays inside."
                 )
 
+        # The clearance geometry is a *second* reference, independent of the
+        # dynamics one the tube carries, and nothing recorded it. Two witnesses
+        # built on the same tube against completely different obstacles produced
+        # byte-identical justification strings, so the audit log could not tell
+        # which geometry the clearance claim was actually proved for.
+        #
+        # There is no stored ground truth to check it against -- the tube knows
+        # nothing about obstacles -- so the honest move is to record it, not to
+        # invent a comparison. A bound method (``clear.interval_batch``) carries
+        # its owner, so the usual call site needs no change; a bare function or
+        # lambda has no identity and is recorded as undeclared rather than
+        # passed off as a named geometry. Same idiom as required_horizon=None:
+        # the weaker claim is visible in the audit log, not implied by silence.
+        if clearance_id is None:
+            owner = getattr(clearance_batched, "__self__", None)
+            rid = getattr(owner, "reference_id", None)
+            if callable(rid):
+                clearance_id = str(rid())
+
         clearance_lo = clearance_lower_bounds(tube, clearance_batched)
         return cls(
             tube=tube,
             clearance_lo=clearance_lo,
             c_required=float(c_required),
             required_horizon=required_horizon,
+            clearance_id=clearance_id,
         )
 
     # -- SoundnessWitness protocol ------------------------------------------- #
@@ -213,12 +235,18 @@ class PredictiveTubeWitness:
             if self.required_horizon is None
             else f"declared requirement {self.required_horizon}, met"
         )
+        geometry = (
+            "undeclared clearance geometry"
+            if self.clearance_id is None
+            else f"clearance h = {self.clearance_id}"
+        )
         return (
             f"score s = max_t(c_required - lo(IA[h](X_t))) over t <= "
             f"K={self.tube.horizon} (requested {self.tube.requested_horizon}; "
             f"{declared}); s <= 0 implies true clearance >= "
             f"{self.c_required:g} for every t <= K, so silence is sound over "
-            f"the whole certified horizon"
+            f"the whole certified horizon; tube certified against reference "
+            f"{self.tube.reference_id!r}; {geometry}"
         )
 
     def miss_probability(self, threshold: float) -> float:

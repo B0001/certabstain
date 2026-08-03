@@ -91,6 +91,12 @@ class TubeResult:
     horizon: int
     requested_horizon: int
     cover_exit_reason: str | None
+    # The dynamics reference the whole chain was certified against, carried
+    # forward from the certificate. propagate_tube enforces the network binding
+    # (spec A4) but the reference binding (spec A1) had nowhere to survive: the
+    # tube dropped it, so a W2 witness built downstream could not name -- let
+    # alone check -- which reference its guarantee rests on.
+    reference_id: str
 
 
 def propagate_tube(
@@ -249,6 +255,7 @@ def propagate_tube(
         horizon=horizon,
         requested_horizon=K,
         cover_exit_reason=exit_reason,
+        reference_id=cert.reference_id,
     )
 
 
