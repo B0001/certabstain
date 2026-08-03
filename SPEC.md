@@ -308,7 +308,11 @@ against hostile in-process code is not claimed and would need a separate
 process or an HSM.
 
 External cross-check: the VNNLIB instances and α,β-CROWN results are committed
-as artifacts so a third party can re-verify without our code.
+as artifacts (`artifacts/vnnlib/`, verdicts in
+`artifacts/abcrown_run_2026-08-03.json`) so a third party can re-verify
+without our code. Run α,β-CROWN with `double_fp: true`; at its float32
+default one instance returns a spurious `sat`, explained in
+`artifacts/vnnlib/RUN.md`.
 
 ---
 
