@@ -187,7 +187,7 @@ down to a floor of 1 step by `k ≈ 231` and stays there for every higher
 stiffness sampled, up to `k = 10^6`. Every single row in the sweep — *including
 the least-stiff one, `k=10`* — also trips the script's own kill-criterion
 check (`kill_by_5: true` on all twelve rows). That check has two clauses
-(`tube_sweep.py:107`): the tube failed to reach step 5 at all, *or* its
+(`tube_sweep.py:108`): the tube failed to reach step 5 at all, *or* its
 `vy_width` at step 5 exceeds the declared `0.15` clearance band. Which clause
 fires is worth separating, because they say different things. At `k=10` — the
 best case measured here — the tube does reach step 5 and the width clause is
@@ -371,8 +371,16 @@ recording rather than quietly fixing:
 - **The gate's non-bypassability claim was, as originally written, false.**
   A public `authority` property handed out a `mint()` oracle that applied no
   score, threshold, or cover check, and the `authority=` constructor argument
-  accepted any object whose `verify()` returned `True`. Both are closed (a
-  mint-free `CertificateVerifier`, and a type check), the certificate's MAC
+  accepted any object whose `verify()` returned `True`. Both are closed: the
+  property is now a mint-free `CertificateVerifier`, and the `authority=`
+  argument was **removed outright** rather than type-checked. A type check was
+  the first attempt and was not enough — a subclass overriding `verify()`
+  still passes `isinstance`, and even a genuine `CertificateAuthority` leaves
+  the *caller* holding `mint()` for the very instance the gate verifies
+  against. The gate now constructs its own authority and accepts none, which
+  is what makes "the policy cannot mint its own permission" true: a caller's
+  own authority has a different key, so nothing it mints verifies here. The
+  certificate's MAC
   now covers `score` and `threshold` rather than leaving them re-labellable,
   and the signature scan that enforces all of this is now an allowlist over
   the whole gate module instead of a six-name denylist over one class. The
