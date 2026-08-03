@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: certabstain-dev
+nameSuffix: -dev
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: dev
+    includeSelectors: false
+
+patches:
+  - path: dev-patch.yaml
+    # Applies to all three sweep Jobs -- they share the same dev sizing.
+    target:
+      kind: Job
+
+images:
+  - name: certabstain
+    newTag: dev

@@ -1,0 +1,24 @@
+# JSON 6902 -- applies to all three sweep Jobs; see the dev overlay for why.
+#
+# Only the deadline and QoS are set here. Per-sweep memory stays at the base
+# values, which are already sized per sweep (tube_sweep carries interval state
+# to K_MAX and asks for more than the other two); flattening them to one number
+# here would throw that away.
+- op: add
+  path: /spec/activeDeadlineSeconds
+  value: 21600
+- op: replace
+  path: /spec/backoffLimit
+  value: 3
+# CPU request raised to equal the CPU limit, so the sweep gets a full core
+# reserved rather than competing for it. These pods stay Burstable, NOT
+# Guaranteed -- Guaranteed additionally requires memory request == limit, and
+# equalising that here would mean picking one number for all three sweeps and
+# discarding the per-sweep sizing above. Burstable is the deliberate trade:
+# better memory headroom, at the cost of being evicted before a Guaranteed pod
+# under node pressure. These Jobs are restartable (backoffLimit 3), so that is
+# an acceptable exchange; a run that must not be evicted should instead set
+# memory request == limit on that one Job.
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/cpu
+  value: "1"

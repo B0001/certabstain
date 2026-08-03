@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - pvc.yaml
+  - job-scaling-study.yaml
+  - job-tube-sweep.yaml
+  - job-stiffness-sweep.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: certabstain
+      app.kubernetes.io/part-of: certabstain
+      app.kubernetes.io/component: sweep
+    # Never true for a Job: the controller owns an immutable
+    # batch.kubernetes.io/controller-uid selector.
+    includeSelectors: false
+
+images:
+  - name: certabstain
+    newTag: 0.1.0
