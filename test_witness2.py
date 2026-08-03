@@ -28,6 +28,7 @@ from certabstain import (
     SpringDamper2D,
     TwoSidedClaim,
     VerifiedDiscrepancyWitness,
+    build_monitor,
     certify_epsilon,
     propagate_tube,
 )
@@ -211,6 +212,63 @@ def test_gate_abstains_with_left_certified_domain_reason() -> None:
     assert d_out.abstained
     assert d_out.reason == "left certified domain"
     assert d_out.action == "HALT"
+
+
+def test_build_monitor_wires_the_cover_check_spec_7_7() -> None:
+    """Spec 7.7 must hold on the *documented* path, not just a hand-built gate.
+
+    The test above builds its ActionGate directly with ``cover=w.covers``, and
+    so did demo.py and the driver skill -- every caller that actually got the
+    check bypassed build_monitor to get it. build_monitor itself dropped the
+    predicate, so anyone following the one-call route in the package docstring
+    got a monitor that scored happily outside the domain its claim was proved
+    over: a guarantee silently evaluated where it does not hold.
+    """
+    net, cert = _clearance_net_and_cert()
+    w = VerifiedDiscrepancyWitness.bind(cert, net, CLEAR.reference_id())
+
+    rng = np.random.default_rng(0)
+    trajs = [list(w.score(rng.uniform(0.5, 1.5, 20))) for _ in range(400)]
+    monitor = build_monitor(
+        nominal_trajectories=trajs, alpha=0.05, witness=w, safe_action="HALT"
+    )
+
+    inside = np.array([0.1, -0.1])
+    assert w.covers(inside)
+    d_in = monitor.step(
+        observation=inside, proposed_action=np.array([1.0]), score=-1.0
+    )
+    assert not d_in.abstained
+
+    outside = np.array([10.0, 10.0])
+    assert not w.covers(outside)
+    d_out = monitor.step(
+        observation=outside, proposed_action=np.array([1.0]), score=-1.0
+    )
+    assert d_out.abstained
+    assert d_out.reason == "left certified domain"
+    assert d_out.action == "HALT"
+
+
+def test_build_monitor_leaves_cover_unset_for_a_witness_without_one() -> None:
+    """Wiring 7.7 must not invent a cover for witnesses that have no domain.
+
+    CertifiedModelErrorWitness carries a global epsilon, not a certified
+    region; there is nothing to be outside of. The gate must stay cover-free
+    rather than abstaining on everything.
+    """
+    from certabstain import CertifiedModelErrorWitness
+
+    w = CertifiedModelErrorWitness(epsilon=0.1)
+    rng = np.random.default_rng(0)
+    trajs = [list(w.score(rng.uniform(0.5, 1.5, 20))) for _ in range(400)]
+    monitor = build_monitor(
+        nominal_trajectories=trajs, alpha=0.05, witness=w, safe_action="HALT"
+    )
+    d = monitor.step(
+        observation=np.array([1e6, 1e6]), proposed_action=np.array([1.0]), score=-1.0
+    )
+    assert not d.abstained
 
 
 def test_gate_without_cover_is_unaffected() -> None:

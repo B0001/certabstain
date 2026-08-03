@@ -259,11 +259,21 @@ def build_monitor(
             witness=witness,
         )
 
+    # Spec 7.7 -- "runtime state outside the certified cover -> abstain" -- was
+    # dead on this path. A witness whose guarantee only holds inside a certified
+    # domain (W1/W2) carries its own ``covers`` predicate, but build_monitor
+    # dropped it, so every caller who took the documented one-call route got a
+    # gate that scored happily outside the domain its claim was proved over.
+    # Only demo.py, test_witness2.py and the driver skill got the check, and
+    # they got it by bypassing build_monitor and constructing ActionGate by hand.
+    # Witnesses with no cover (margin, model-error, empirical-power) have no
+    # ``covers`` and correctly yield None here.
     gate = ActionGate(
         threshold=calibrator.threshold,
         false_alarm_bound=alpha,
         safe_action=safe_action,
         claim=claim,
+        cover=getattr(witness, "covers", None),
     )
 
     return Monitor(
