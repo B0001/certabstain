@@ -23,7 +23,9 @@ against the float64 model.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -122,6 +124,29 @@ def onnx_forward_max_diff(
 # --------------------------------------------------------------------------- #
 
 
+def _numeral(v: Any) -> str:
+    """Format one value as a legal VNNLIB decimal numeral.
+
+    ``repr`` of a numpy scalar is not a numeral: under NumPy >= 2 it round-trips
+    as ``np.float64(0.5)``, which no VNNLIB grammar accepts. Every literal in an
+    exported instance goes through here, via ``float``, so the text stays a
+    numeral whatever array scalar type reaches it. ``repr(float(...))`` is the
+    shortest string that round-trips exactly, so no precision is lost against
+    the padded bound.
+
+    A non-finite value would format as ``inf``/``nan`` -- also not numerals, and
+    an instance carrying one asserts nothing. Refused here rather than written
+    out, since a file that parses but means nothing is worse than no file.
+    """
+    f = float(v)
+    if not math.isfinite(f):
+        raise ValueError(
+            f"cannot export {f!r} as a VNNLIB numeral: an instance bound must "
+            "be finite, or the property it encodes is vacuous"
+        )
+    return repr(f)
+
+
 def export_vnnlib(
     box: Interval,
     out_bounds: Interval,
@@ -148,13 +173,13 @@ def export_vnnlib(
         lines.append(f"(declare-const Y_{i} Real)")
     lines.append("")
     for i in range(n_in):
-        lines.append(f"(assert (>= X_{i} {box.lo[i]!r}))")
-        lines.append(f"(assert (<= X_{i} {box.hi[i]!r}))")
+        lines.append(f"(assert (>= X_{i} {_numeral(box.lo[i])}))")
+        lines.append(f"(assert (<= X_{i} {_numeral(box.hi[i])}))")
     lines.append("")
     escapes = []
     for i in range(n_out):
-        escapes.append(f"(and (>= Y_{i} {ub[i]!r}))")
-        escapes.append(f"(and (<= Y_{i} {lb[i]!r}))")
+        escapes.append(f"(and (>= Y_{i} {_numeral(ub[i])}))")
+        escapes.append(f"(and (<= Y_{i} {_numeral(lb[i])}))")
     lines.append("(assert (or " + " ".join(escapes) + "))")
     lines.append("")
 

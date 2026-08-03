@@ -16,6 +16,8 @@ tests here validate the artifacts it consumes.
 
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pytest
 
@@ -250,7 +252,18 @@ def test_vnnlib_property_is_wellformed_and_padded(tmp_path) -> None:
     assert text.count("declare-const X_") == 3
     assert text.count("declare-const Y_") == 2
     for i in range(3):
-        assert f"(assert (>= X_{i} {box.lo[i]!r}))" in text
+        assert f"(assert (>= X_{i} {float(box.lo[i])!r}))" in text
+
+    # Every literal must be a legal VNNLIB numeral. The previous form of this
+    # test interpolated `{box.lo[i]!r}` on both sides, so it reproduced the
+    # formatting bug it was meant to catch and passed while all 24 shipped
+    # instances carried `np.float64(...)` literals that no verifier can parse.
+    # Assert the grammar, not the round-trip of our own formatter.
+    numeral = re.compile(r"^-?\d+(\.\d+)?([eE][+-]?\d+)?$")
+    literals = re.findall(r"(?:>=|<=)\s+[XY]_\d+\s+(\S+?)\)", text)
+    assert len(literals) == 2 * 3 + 2 * 2
+    for lit in literals:
+        assert numeral.match(lit), f"not a VNNLIB numeral: {lit!r}"
     # padded outward: the UB constants in the file exceed our hi strictly
     ub_line = [l for l in text.splitlines() if l.startswith("(assert (or")][0]
     for i in range(2):
