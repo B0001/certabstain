@@ -33,7 +33,7 @@
       "point_width": 8.326672684688674e-17
     },
     {
-      "k": 316.2277660168379,
+      "k": 316.22776601683796,
       "straddle_enc_width": 1.0085811388300843,
       "straddle_mc_width": 1.002,
       "straddle_sharpness": 1.0065680028244355,
@@ -113,14 +113,14 @@
       "point_width": 1.2434497875801753e-14
     },
     {
-      "k": 3162277.660168379,
-      "straddle_enc_width": 16.81838830084191,
+      "k": 3162277.6601683795,
+      "straddle_enc_width": 16.818388300841914,
       "straddle_mc_width": 16.808388300841898,
-      "straddle_sharpness": 1.0005949410390234,
-      "contact_enc_width": 26.310221281347065,
-      "contact_mc_width": 26.29022128134703,
-      "contact_sharpness": 1.000760739127526,
-      "point_width": 2.6645352591003757e-14
+      "straddle_sharpness": 1.0005949410390236,
+      "contact_enc_width": 26.31022128134707,
+      "contact_mc_width": 26.290221281347037,
+      "contact_sharpness": 1.0007607391275257,
+      "point_width": 2.4868995751603507e-14
     },
     {
       "k": 10000000.0,

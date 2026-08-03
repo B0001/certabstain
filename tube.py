@@ -38,7 +38,7 @@ from typing import Callable
 import numpy as np
 
 from .discrepancy import EpsilonCertificate
-from .errors import EnclosureError, NetworkCertificateMismatch
+from .errors import EnclosureError, HorizonTooShort, NetworkCertificateMismatch
 from .interval import Interval, require_sound_environment
 from .nnbound import MLP, crown_bounds, jacobian_bounds
 
@@ -100,6 +100,7 @@ def propagate_tube(
     controls: list[Interval],
     *,
     n_states: int,
+    required_horizon: int | None = None,
     experimental: bool = False,
 ) -> TubeResult:
     """Propagate the certified interval tube (spec L3) for up to ``len(controls)`` steps.
@@ -121,11 +122,38 @@ def propagate_tube(
     n_states
         Dimensionality of the state; ``net.n_inputs - n_states`` is inferred
         as the control dimension.
+    required_horizon
+        The lookahead the deployment declares it needs. When given and the
+        certified horizon comes in below it, this raises
+        :class:`HorizonTooShort` (spec section 7.8) instead of returning a
+        truncated tube the caller might use as though it reached ``K``.
+        Left ``None``, the horizon shrinks and the shortfall is reported in
+        ``cover_exit_reason`` for the caller to judge -- the right default for
+        sweeps and studies that are *measuring* where the horizon collapses.
 
     Returns
     -------
     TubeResult
     """
+    # Argument sanity first, before any work or any other refusal: a caller
+    # that asked for a nonsensical horizon should hear about that, not about
+    # the environment or the weight hash.
+    if required_horizon is not None:
+        # 0 and negatives would satisfy `horizon < required_horizon` nowhere
+        # and silently behave as None -- a caller computing `k - 1` and landing
+        # on 0 would get no refusal at all.
+        if (
+            isinstance(required_horizon, bool)   # bool is an int; True is not a horizon
+            or int(required_horizon) != required_horizon
+            or required_horizon < 1
+        ):
+            raise ValueError(
+                f"required_horizon must be a positive whole number of steps; "
+                f"got {required_horizon!r}. Pass None for the shrink-and-report "
+                f"behaviour instead of a non-positive requirement."
+            )
+        required_horizon = int(required_horizon)
+
     require_sound_environment()
     if not cert.matches_network(net):
         raise NetworkCertificateMismatch(
@@ -146,6 +174,12 @@ def propagate_tube(
     eps_iv = Interval(-eps, eps)
 
     K = len(controls)
+    if required_horizon is not None and required_horizon > K:
+        raise HorizonTooShort(
+            f"required_horizon={required_horizon} exceeds the {K} control box(es) "
+            f"supplied, so the requested lookahead is unreachable by construction. "
+            f"Declare controls for every step the deployment needs."
+        )
     boxes: list[Interval] = [X0]
     g_boxes: list[Interval] = [X0]
     widths: list[np.ndarray] = [np.array(X0.hi - X0.lo)]
@@ -197,6 +231,15 @@ def propagate_tube(
         gronwall_widths.append(np.full(n_states, 2.0 * r_next))
         x_bar, r = x_bar_next, r_next
         horizon = t + 1
+
+    if required_horizon is not None and horizon < required_horizon:
+        raise HorizonTooShort(
+            f"certified horizon is {horizon} step(s); the deployment declared it "
+            f"requires {required_horizon} (of {K} requested). "
+            f"{exit_reason or 'The tube did not reach the required horizon.'} "
+            f"Shrink the required horizon, widen the certified cover, or "
+            f"re-certify over a domain the tube stays inside."
+        )
 
     return TubeResult(
         boxes=tuple(boxes),

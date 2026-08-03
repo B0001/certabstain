@@ -35,7 +35,7 @@ from fractions import Fraction
 
 import numpy as np
 
-from .errors import EnclosureError, EnvironmentUnsound
+from .errors import EnclosureError, EnvironmentUnsound, NonFiniteEnclosure
 
 __all__ = [
     "Interval",
@@ -87,7 +87,7 @@ class Interval:
         hi_arr = np.array(hi_b, dtype=np.float64, copy=True)
 
         if not (np.all(np.isfinite(lo_arr)) and np.all(np.isfinite(hi_arr))):
-            raise EnclosureError(
+            raise NonFiniteEnclosure(
                 "interval endpoints must be finite; a non-finite endpoint means "
                 "an operation lost its bound (overflow or invalid input) and "
                 "the enclosure would be vacuous. Refusing to construct it."
@@ -233,13 +233,13 @@ class Interval:
         with np.errstate(over="ignore"):  # inf is checked two lines down
             raw_hi = np.exp(self.hi)
         if np.any(np.isinf(raw_hi)):
-            raise EnclosureError(
+            raise NonFiniteEnclosure(
                 "exp overflows float64 on this interval; the enclosure would "
                 "be unbounded. Shrink the domain."
             )
         hi = _up(raw_hi, _TRANS_STEPS)
         if np.any(np.isinf(hi)):
-            raise EnclosureError(
+            raise NonFiniteEnclosure(
                 "exp upper endpoint crossed the float64 ceiling under outward "
                 "rounding. Shrink the domain."
             )
@@ -315,7 +315,7 @@ def matvec(W, x: Interval) -> Interval:
     if W.ndim != 2:
         raise EnclosureError(f"matvec expects a 2-D matrix; got ndim={W.ndim}")
     if not np.all(np.isfinite(W)):
-        raise EnclosureError("matvec weight matrix contains non-finite entries")
+        raise NonFiniteEnclosure("matvec weight matrix contains non-finite entries")
     if x.lo.ndim != 1 or x.lo.shape[0] != W.shape[1]:
         raise EnclosureError(
             f"shape mismatch: W is {W.shape}, x is {x.lo.shape}; expected "
@@ -339,7 +339,7 @@ def affine(W, x: Interval, b) -> Interval:
     """Sound enclosure of W @ x + b for exact W, b and interval x."""
     b = np.asarray(b, dtype=np.float64)
     if not np.all(np.isfinite(b)):
-        raise EnclosureError("affine bias vector contains non-finite entries")
+        raise NonFiniteEnclosure("affine bias vector contains non-finite entries")
     y = matvec(W, x)
     return Interval(_down(y.lo + b), _up(y.hi + b))
 

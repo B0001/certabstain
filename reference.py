@@ -46,7 +46,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .errors import EnclosureError
+from .errors import EnclosureError, ModeIndeterminate, NonFiniteEnclosure
 from .interval import Interval, istack
 
 __all__ = ["SpringDamper2D", "PusherSlider", "CircleClearance"]
@@ -104,7 +104,7 @@ class SpringDamper2D:
     def __post_init__(self) -> None:
         vals = (self.m, self.g, self.k, self.d, self.mu_t, self.dt)
         if not all(np.isfinite(v) for v in vals):
-            raise EnclosureError("SpringDamper2D parameters must be finite")
+            raise NonFiniteEnclosure("SpringDamper2D parameters must be finite")
         if self.m <= 0 or self.dt <= 0 or min(self.k, self.d, self.mu_t) < 0:
             raise ValueError("need m > 0, dt > 0, and k, d, mu_t >= 0")
 
@@ -208,7 +208,7 @@ class PusherSlider:
     def __post_init__(self) -> None:
         vals = (self.a, self.c, self.mu, self.dt, self.py_max)
         if not all(np.isfinite(v) for v in vals):
-            raise EnclosureError("PusherSlider parameters must be finite")
+            raise NonFiniteEnclosure("PusherSlider parameters must be finite")
         if min(self.a, self.c, self.dt) <= 0 or self.mu < 0 or self.py_max <= 0:
             raise ValueError("need a, c, dt > 0, mu >= 0, py_max > 0")
         if self.py_max >= self.a:
@@ -326,7 +326,7 @@ class PusherSlider:
         it never declared. A2 is enforced here, not assumed.
         """
         if not self.in_mode(S, U, mode):
-            raise EnclosureError(
+            raise ModeIndeterminate(
                 f"box does not certifiably lie in mode {mode!r}; the motion-"
                 f"cone predicate is indeterminate or violated somewhere in "
                 f"the box. Split the domain at the cone or certify per mode."
@@ -377,7 +377,7 @@ class CircleClearance:
 
     def __post_init__(self) -> None:
         if not all(np.isfinite(v) for v in (self.ox, self.oy, self.r)):
-            raise EnclosureError("CircleClearance parameters must be finite")
+            raise NonFiniteEnclosure("CircleClearance parameters must be finite")
         if self.r <= 0:
             raise ValueError("obstacle radius must be positive")
 

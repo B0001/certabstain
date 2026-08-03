@@ -50,9 +50,12 @@ from .errors import (
     EnvironmentUnsound,
     ForgedCertificate,
     GroupTooSmall,
+    HorizonTooShort,
     InsufficientCalibrationData,
     MissingCertificate,
+    ModeIndeterminate,
     NetworkCertificateMismatch,
+    NonFiniteEnclosure,
     ReferenceMismatch,
     ReplayedCertificate,
     ShiftBudgetExceeded,
@@ -60,7 +63,13 @@ from .errors import (
     TargetNotCertified,
     StaleCertificate,
 )
-from .gate import ActionGate, CertificateAuthority, GateDecision, SafetyCertificate
+from .gate import (
+    ActionGate,
+    CertificateAuthority,
+    CertificateVerifier,
+    GateDecision,
+    SafetyCertificate,
+)
 from .nnbound import MLP, crown_bounds, ibp_bounds, jacobian_bounds
 from .discrepancy import EpsilonCertificate, certify_epsilon, weights_hash
 from .reference import CircleClearance, PusherSlider, SpringDamper2D
@@ -102,6 +111,7 @@ __all__ = [
     "GateDecision",
     "SafetyCertificate",
     "CertificateAuthority",
+    "CertificateVerifier",
     "CertAbstainError",
     "InsufficientCalibrationData",
     "DegenerateScores",
@@ -128,6 +138,7 @@ __all__ = [
     "weights_hash",
     "TargetNotCertified",
     "CoverTooSmall",
+    "HorizonTooShort",
     "TubeResult",
     "propagate_tube",
     "cover_contains_box",
@@ -141,6 +152,8 @@ __all__ = [
     "rounding_self_test",
     "require_sound_environment",
     "EnclosureError",
+    "ModeIndeterminate",
+    "NonFiniteEnclosure",
     "EnvironmentUnsound",
 ]
 

@@ -6,6 +6,7 @@ tests. If the finite-sample bounds in conformal.py are wrong, these fail.
 
 from __future__ import annotations
 
+import inspect
 import math
 
 import numpy as np
@@ -14,6 +15,7 @@ import pytest
 from certabstain import (
     ActionGate,
     CertificateAuthority,
+    CertificateVerifier,
     CertifiedModelErrorWitness,
     EmpiricalPowerWitness,
     ForgedCertificate,
@@ -311,7 +313,7 @@ def test_gate_emits_when_certified_and_abstains_when_not() -> None:
 def test_certificate_cannot_be_forged_by_a_foreign_authority() -> None:
     g = _gate()
     attacker = CertificateAuthority()
-    attacker._epoch = g.authority.epoch  # noqa: SLF001 -- simulating an attacker
+    attacker._epoch = g.verifier.epoch  # noqa: SLF001 -- simulating an attacker
     forged = attacker.mint(
         observation=np.zeros(3),
         action=np.ones(2),
@@ -320,7 +322,7 @@ def test_certificate_cannot_be_forged_by_a_foreign_authority() -> None:
         false_alarm_bound=0.0,
         miss_bound=0.0,
     )
-    assert not g.authority.verify(forged)
+    assert not g.verifier.verify(forged)
     with pytest.raises(ForgedCertificate):
         g._admit(forged, np.zeros(3), np.ones(2))  # noqa: SLF001
 
@@ -340,7 +342,7 @@ def test_certificate_is_epoch_bound() -> None:
     from certabstain.errors import StaleCertificate
 
     g = _gate()
-    cert = g.authority.mint(
+    cert = g._authority.mint(  # noqa: SLF001 -- minting is deliberately not public
         observation=np.zeros(3),
         action=np.ones(2),
         score=-1.0,
@@ -348,7 +350,7 @@ def test_certificate_is_epoch_bound() -> None:
         false_alarm_bound=0.05,
         miss_bound=0.0,
     )
-    g.authority.advance()
+    g._authority.advance()  # noqa: SLF001
     with pytest.raises(StaleCertificate):
         g._admit(cert, np.zeros(3), np.ones(2))  # noqa: SLF001
 
@@ -357,7 +359,7 @@ def test_certificate_is_action_bound() -> None:
     from certabstain.errors import BindingMismatch
 
     g = _gate()
-    cert = g.authority.mint(
+    cert = g._authority.mint(  # noqa: SLF001 -- minting is deliberately not public
         observation=np.zeros(3),
         action=np.ones(2),
         score=-1.0,
@@ -377,6 +379,11 @@ def test_gate_fails_closed_on_nonfinite_score() -> None:
         d = g.step(observation=np.zeros(3), proposed_action=np.ones(2), score=bad)
         assert d.abstained
         assert d.action == "STOP"
+        # Pin the *reason*, as the cover-membership test does. Asserting only
+        # `abstained` would still pass if the non-finite branch were deleted
+        # and the score fell through to the threshold comparison or the broad
+        # fail-closed handler -- three different refusals, one assertion.
+        assert "non-finite monitor score" in d.reason
 
 
 def test_gate_fails_closed_on_internal_exception() -> None:
@@ -393,20 +400,255 @@ def test_gate_fails_closed_on_internal_exception() -> None:
 
 
 def test_gate_exposes_no_override_path() -> None:
-    """There is no public affordance for emitting an uncertified action."""
+    """There is no public affordance for emitting an uncertified action.
+
+    An allowlist, not a denylist. A denylist of six names ("force", "override",
+    ...) passes green on ``step(..., allow_uncertified=True)``, which is the
+    same bypass under a name nobody thought to ban -- so every public parameter
+    and attribute must be named here explicitly, and adding one is a
+    deliberate edit to this test rather than a silent extension of the surface.
+    """
     import inspect
 
     public = [n for n in dir(ActionGate) if not n.startswith("_")]
-    assert set(public) == {"authority", "log", "miss_bound", "step", "abstention_rate"}
+    assert set(public) == {"verifier", "log", "miss_bound", "step", "abstention_rate"}
 
-    sig = inspect.signature(ActionGate.step)
-    banned = {"force", "override", "strict", "unsafe", "bypass", "skip_check"}
-    assert not banned & set(sig.parameters)
+    # `authority` itself must NOT be public: it carries mint(), an oracle that
+    # applies no score/threshold/cover check.
+    assert not hasattr(ActionGate, "authority")
+
+    for method, allowed in (
+        (ActionGate.step, {"self", "observation", "proposed_action", "score"}),
+        (
+            ActionGate.__init__,
+            {
+                "self", "threshold", "false_alarm_bound", "safe_action",
+                "claim", "cover",
+            },
+        ),
+    ):
+        sig = inspect.signature(method)
+        assert set(sig.parameters) == allowed, (
+            f"{method.__qualname__} grew a parameter not blessed by this test: "
+            f"{set(sig.parameters) - allowed}"
+        )
+        assert all(
+            p.kind is inspect.Parameter.KEYWORD_ONLY
+            for n, p in sig.parameters.items()
+            if n != "self"
+        ), f"{method.__qualname__} accepts positional or **kwargs arguments"
+
+
+def test_no_public_mint_or_override_anywhere_in_the_gate_module() -> None:
+    """Every public callable the gate module exports is frozen by exact set.
+
+    A denylist over one class was not enough: a mutation study showed three
+    real bypasses shipping green against the earlier version of this test --
+    a new public `CertificateAuthority.mint_unchecked`, a new `allow_any=`
+    parameter on `mint`, and a public *instance* attribute honoured by `step`
+    (invisible to `dir(ActionGate)`, which only sees the class). So the
+    signature of every public member is pinned by name, and __slots__ is
+    asserted so instance attributes cannot appear at all.
+    """
+    import inspect
+
+    from certabstain import gate as gate_mod
+
+    assert set(gate_mod.__all__) == {
+        "SafetyCertificate", "CertificateAuthority", "CertificateVerifier",
+        "ActionGate", "GateDecision",
+    }
+    public_module_names = {
+        n for n in dir(gate_mod)
+        if not n.startswith("_") and not inspect.ismodule(getattr(gate_mod, n))
+    }
+    assert public_module_names <= set(gate_mod.__all__) | {
+        "Any", "Callable", "Final", "dataclass", "field", "np",
+        "TwoSidedClaim", "BindingMismatch", "CertAbstainError",
+        "ForgedCertificate", "MissingCertificate", "ReplayedCertificate",
+        "StaleCertificate", "annotations",
+    }, f"gate.py grew an unexported public name: {public_module_names}"
+
+    # Exact public surface of every exported class. Adding anything -- method,
+    # property, or parameter -- must be a deliberate edit here.
+    expected_members = {
+        "ActionGate": {"verifier", "log", "miss_bound", "step", "abstention_rate"},
+        "CertificateAuthority": {"epoch", "advance", "mint", "verify"},
+        "CertificateVerifier": {"epoch", "verify"},
+        "SafetyCertificate": {
+            "binding", "epoch", "nonce", "tag", "false_alarm_bound",
+            "miss_bound", "score", "threshold", "is_two_sided", "summary",
+        },
+        "GateDecision": {"action", "abstained", "reason", "certificate"},
+    }
+    expected_params = {
+        ("ActionGate", "step"):
+            {"self", "observation", "proposed_action", "score"},
+        ("ActionGate", "__init__"):
+            {"self", "threshold", "false_alarm_bound", "safe_action", "claim",
+             "cover"},
+        ("CertificateAuthority", "mint"):
+            {"self", "observation", "action", "score", "threshold",
+             "false_alarm_bound", "miss_bound"},
+        ("CertificateAuthority", "verify"): {"self", "cert"},
+        ("CertificateAuthority", "advance"): {"self"},
+        ("CertificateVerifier", "verify"): {"self", "cert"},
+        ("SafetyCertificate", "summary"): {"self"},
+    }
+
+    for name, expected in expected_members.items():
+        cls = getattr(gate_mod, name)
+        public = {n for n in dir(cls) if not n.startswith("_")}
+        assert public == expected, (
+            f"{name}'s public surface changed: added {public - expected}, "
+            f"removed {expected - public}"
+        )
+        for mname in public:
+            member = inspect.getattr_static(cls, mname, None)
+            if isinstance(member, property) or not callable(member):
+                continue
+            try:
+                params = set(inspect.signature(member).parameters)
+            except (TypeError, ValueError):
+                continue
+            key = (name, mname)
+            assert key in expected_params, (
+                f"{name}.{mname} is callable but not pinned by this test"
+            )
+            assert params == expected_params[key], (
+                f"{name}.{mname} parameters changed: "
+                f"added {params - expected_params[key]}, "
+                f"removed {expected_params[key] - params}"
+            )
+
+    # __init__ is not in dir()'s public set but is the other entry point.
+    assert set(inspect.signature(gate_mod.ActionGate.__init__).parameters) == \
+        expected_params[("ActionGate", "__init__")]
     assert all(
         p.kind is inspect.Parameter.KEYWORD_ONLY
-        for n, p in sig.parameters.items()
+        for n, p in inspect.signature(gate_mod.ActionGate.__init__).parameters.items()
         if n != "self"
     )
+
+    # Instance attributes are invisible to dir(cls), so pin __slots__ too: a
+    # bypass flag set on the instance was the mutation that slipped through.
+    for name in ("ActionGate", "CertificateAuthority", "CertificateVerifier"):
+        cls = getattr(gate_mod, name)
+        assert hasattr(cls, "__slots__"), f"{name} lost __slots__"
+        assert not any(s.startswith("_") is False for s in cls.__slots__), (
+            f"{name}.__slots__ declares a public attribute: {cls.__slots__}"
+        )
+    g = ActionGate(threshold=0.0, false_alarm_bound=0.05, safe_action="STOP")
+    with pytest.raises(AttributeError):
+        g.emit_anyway = True  # type: ignore[attr-defined]
+
+
+def test_the_gate_hands_out_no_mint_oracle() -> None:
+    """The policy cannot mint its own permission through the gate's surface.
+
+    A public `authority` property was exactly that: mint() applies no score,
+    threshold or cover check, so a gate configured to always abstain could
+    still be handed a verifying certificate for any observation/action pair.
+    """
+    g = ActionGate(
+        threshold=0.0, false_alarm_bound=0.05, safe_action="STOP",
+        cover=lambda _obs: False,          # this gate must abstain, always
+    )
+    obs, act = np.zeros(3), np.ones(2)
+    assert g.step(observation=obs, proposed_action=act, score=-1e9).abstained
+
+    # The audit view is public, and it can check a tag but not create one.
+    assert isinstance(g.verifier, CertificateVerifier)
+    assert not hasattr(g.verifier, "mint")
+    assert not hasattr(g, "authority")
+
+
+def test_gate_accepts_no_authority_from_outside() -> None:
+    """There is no injection point for the authority the gate verifies against.
+
+    A type-checked `authority=` was not enough. Even a *genuine*
+    CertificateAuthority left the caller holding mint() -- an oracle applying
+    no score, threshold or cover check -- for the very instance the gate
+    verifies against, so a gate rigged to always abstain could still be handed
+    a certificate that its own public verifier accepts. And an isinstance
+    check is subclass-permissive: a two-line subclass overriding verify() to
+    return True defeats it. The gate mints its own authority instead.
+    """
+    assert "authority" not in inspect.signature(ActionGate.__init__).parameters
+
+    class Lax(CertificateAuthority):
+        def verify(self, cert) -> bool:  # would accept anything
+            return True
+
+    for substitute in (Lax(), CertificateAuthority(), object()):
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            ActionGate(
+                threshold=0.0, false_alarm_bound=0.05, safe_action="STOP",
+                authority=substitute,
+            )
+
+    # A foreign authority's certificates do not verify here, because the gate's
+    # key is its own and was never shared.
+    g = ActionGate(threshold=0.0, false_alarm_bound=0.05, safe_action="STOP")
+    foreign = CertificateAuthority()
+    obs, act = np.zeros(3), np.ones(2)
+    forged = foreign.mint(
+        observation=obs, action=act, score=-1e9, threshold=0.0,
+        false_alarm_bound=0.0, miss_bound=0.0,
+    )
+    assert not g.verifier.verify(forged)
+
+
+def test_gate_refuses_a_meaningless_threshold() -> None:
+    """`score > threshold` is False for NaN and +inf, so a non-finite
+    threshold certifies every score presented -- the strict-off switch the
+    module docstring denies exists, reachable by direct construction."""
+    for bad in (float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="threshold must be finite"):
+            ActionGate(threshold=bad, false_alarm_bound=0.05, safe_action="STOP")
+    for bad in (float("nan"), -0.1, 1.5):
+        with pytest.raises(ValueError, match="false_alarm_bound"):
+            ActionGate(threshold=0.0, false_alarm_bound=bad, safe_action="STOP")
+
+
+def test_certificate_score_and_threshold_are_authenticated() -> None:
+    """The MAC covers every field, as SafetyCertificate's docstring claims.
+
+    With score/threshold outside the tag, a certificate could be re-labelled
+    with any score and still verify -- so an auditor reading cert.summary()
+    would be reading unauthenticated data.
+    """
+    from dataclasses import replace
+
+    g = _gate()
+    d = g.step(observation=np.zeros(3), proposed_action=np.ones(2), score=-1.0)
+    cert = d.certificate
+    assert cert is not None and g.verifier.verify(cert)
+
+    for field_name, bogus in (("score", -999.0), ("threshold", 999.0)):
+        relabelled = replace(cert, **{field_name: bogus})
+        assert not g.verifier.verify(relabelled), (
+            f"{field_name} is outside the MAC: a re-labelled certificate verified"
+        )
+
+
+def test_gate_fails_closed_when_the_authority_itself_raises() -> None:
+    """`Fails closed on *any* internal error` includes the epoch advance.
+
+    With advance() outside the try, the exception escaped step() entirely and
+    returned no GateDecision -- a caller with its own except/default could turn
+    that into an emission.
+    """
+    g = _gate()
+
+    class Exploding(CertificateAuthority):
+        def advance(self) -> int:
+            raise RuntimeError("authority unavailable")
+
+    g._authority = Exploding()  # noqa: SLF001 -- injecting an internal failure
+    d = g.step(observation=np.zeros(3), proposed_action=np.ones(2), score=-1.0)
+    assert d.abstained and d.action == "STOP"
+    assert "failed closed on RuntimeError" in d.reason
 
 
 def test_certificate_is_immutable() -> None:

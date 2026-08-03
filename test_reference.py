@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from certabstain import EnclosureError, Interval
+from certabstain import EnclosureError, Interval, ModeIndeterminate
 from certabstain.interval import istack
 from certabstain.reference import PusherSlider, SpringDamper2D
 
@@ -167,7 +167,10 @@ def test_pusher_refuses_cone_straddling_box() -> None:
     cert = model.mode_certificate(S, U)
     assert not any(bool(np.all(v)) for v in cert.values())
     for mode in MODE_NAMES:
-        with pytest.raises(EnclosureError, match="motion"):
+        # Spec 7.3 has its own type: a straddling box is not a numeric
+        # failure, and the remedy (split at the cone / certify per mode)
+        # differs from every other enclosure refusal.
+        with pytest.raises(ModeIndeterminate):
             model.step_interval(S, U, mode)
 
 
@@ -177,8 +180,12 @@ def test_pusher_refuses_py_domain_exit() -> None:
     S = Interval(s, s)
     U = Interval(np.array([0.05, 0.0]), np.array([0.05, 0.0]))
     mode = next(m for m, v in model.mode_certificate(S, U).items() if np.all(v))
-    with pytest.raises(EnclosureError, match="face domain"):
+    # The face-domain exit is a declared-domain violation, not mode
+    # indeterminacy: it keeps the plain class, and this pins that difference.
+    with pytest.raises(EnclosureError) as exc:
         model.step_interval(S, U, mode)
+    assert "face domain" in str(exc.value)
+    assert not isinstance(exc.value, ModeIndeterminate)
 
 
 def test_springdamper_mode_predicates() -> None:

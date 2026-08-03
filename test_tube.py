@@ -21,6 +21,7 @@ import pytest
 
 from certabstain import (
     EpsilonCertificate,
+    HorizonTooShort,
     Interval,
     MLP,
     NetworkCertificateMismatch,
@@ -210,6 +211,58 @@ def test_tube_horizon_shrinks_and_reports_reason_on_cover_exit() -> None:
     assert tube.boxes == (X0,)
 
 
+def test_tube_refuses_when_certified_horizon_is_below_the_declared_one() -> None:
+    """Spec 7.8, second clause. Shrinking the horizon is only half the refusal:
+    a deployment that declared it needs K steps and got fewer must be refused,
+    not handed a short TubeResult whose `horizon` field it might not read."""
+    net, twin, cert = _dim4_control_cert()
+    X0 = Interval(-0.01 * np.ones(4), 0.01 * np.ones(4))
+    wide_control = Interval(np.array([-5.0]), np.array([5.0]))
+
+    # Same cover exit as the test above -- but this caller declared it needs 3.
+    with pytest.raises(HorizonTooShort) as exc:
+        propagate_tube(
+            net, cert, X0, [wide_control] * 3, n_states=4, required_horizon=3
+        )
+    msg = str(exc.value)
+    assert "certified horizon is 0" in msg      # what was achieved
+    assert "requires 3" in msg                  # what was declared
+    assert "before step 0" in msg               # why it fell short, carried through
+
+    # ...and the shortfall is the only reason it refuses. This construction's
+    # tube widens out of the cover after one step even under an in-cover
+    # control, so a caller declaring 1 gets its result -- note horizon (1) is
+    # still short of requested_horizon (3), proving the refusal keys off what
+    # the deployment *declared it needs*, not off the requested length.
+    ok_control = Interval(np.array([-0.01]), np.array([0.01]))
+    tube = propagate_tube(
+        net, cert, X0, [ok_control] * 3, n_states=4, required_horizon=1
+    )
+    assert tube.horizon == 1
+    assert tube.requested_horizon == 3
+    assert tube.cover_exit_reason is not None
+
+
+def test_tube_refuses_a_required_horizon_it_was_given_no_controls_for() -> None:
+    """Declaring a horizon longer than the supplied control sequence is
+    unreachable by construction -- refused up front, not after the walk."""
+    net, twin, cert = _dim4_control_cert()
+    X0 = Interval(-0.01 * np.ones(4), 0.01 * np.ones(4))
+    ok_control = Interval(np.array([-0.01]), np.array([0.01]))
+    with pytest.raises(HorizonTooShort, match="unreachable by construction"):
+        propagate_tube(net, cert, X0, [ok_control] * 2, n_states=4, required_horizon=5)
+
+
+def test_tube_default_still_shrinks_rather_than_refusing() -> None:
+    """The refusal is opt-in. Sweeps that *measure* where the horizon collapses
+    (tube_sweep.py) must keep getting a truncated result, not an exception."""
+    net, twin, cert = _dim4_control_cert()
+    X0 = Interval(-0.01 * np.ones(4), 0.01 * np.ones(4))
+    wide_control = Interval(np.array([-5.0]), np.array([5.0]))
+    tube = propagate_tube(net, cert, X0, [wide_control] * 3, n_states=4)
+    assert tube.horizon == 0 and tube.cover_exit_reason is not None
+
+
 # ===================================================================== #
 # The headline acceptance run: SpringDamper2D, K = 10, 1e5 MC rollouts
 # ===================================================================== #
@@ -331,3 +384,17 @@ def test_tube_acceptance_spring_damper() -> None:
     lo_bounds = clearance_lower_bounds(tube, clear.interval_batch)
     assert lo_bounds.shape == (K + 1,)
     assert np.all(np.isfinite(lo_bounds))
+
+
+def test_tube_refuses_a_nonsensical_required_horizon() -> None:
+    """0 and negatives silently behaved as None: `horizon < required_horizon`
+    is false for both, so a caller computing `k - 1` and landing on 0 got no
+    refusal at all. Validated up front, before any other check."""
+    net, twin, cert = _dim4_control_cert()
+    X0 = Interval(-0.01 * np.ones(4), 0.01 * np.ones(4))
+    ok_control = Interval(np.array([-0.01]), np.array([0.01]))
+    for bad in (0, -3, 2.5, True, False):
+        with pytest.raises(ValueError, match="positive whole number"):
+            propagate_tube(
+                net, cert, X0, [ok_control] * 3, n_states=4, required_horizon=bad
+            )

@@ -13,10 +13,21 @@ actuator command, and it will not produce one without a certificate that:
   * binds the exact observation and action being emitted (no substitution)
   * has not been used before (no replay)
 
-The policy never holds the signing key, so it cannot mint its own permission.
-There is no ``force=``, no ``override=``, no ``strict=False``. Any exception
-anywhere in the path fails closed to the configured safe action rather than
-propagating a live command.
+The policy never holds the signing key, so it cannot mint its own permission:
+the gate exposes only :class:`CertificateVerifier`, which checks a tag but
+cannot create one. There is no ``force=``, no ``override=``, no
+``strict=False``, and no way to supply the authority the gate verifies
+against -- it mints its own, so nobody else holds the key or the minting
+capability for it. Any exception anywhere in the path fails closed to the
+configured safe action rather than propagating a live command.
+
+What that does and does not mean: no supported call sequence through this
+module's public surface yields an uncertified emission, and an allowlist-based
+signature scan (test_certabstain.py) fails the build if the surface grows a
+parameter or attribute this design did not bless. It is not a defense against
+hostile code running in the same interpreter, which can always reach a private
+attribute; the deployment-level form of that separation is an authority in its
+own process or an HSM.
 """
 
 from __future__ import annotations
@@ -39,7 +50,13 @@ from .errors import (
 )
 from .soundness import TwoSidedClaim
 
-__all__ = ["SafetyCertificate", "CertificateAuthority", "ActionGate", "GateDecision"]
+__all__ = [
+    "SafetyCertificate",
+    "CertificateAuthority",
+    "CertificateVerifier",
+    "ActionGate",
+    "GateDecision",
+]
 
 _DIGEST: Final = hashlib.blake2b
 
@@ -134,7 +151,14 @@ class CertificateAuthority:
         epoch: int,
         fa: float,
         miss: float | None,
+        score: float,
+        threshold: float,
     ) -> bytes:
+        # Every field of SafetyCertificate is covered here. score/threshold are
+        # not used to authorize the emission (the gate compares those itself
+        # before minting), but they are what an auditor reads back out of the
+        # log -- so leaving them outside the MAC would make the certificate's
+        # own summary() unauthenticated, re-labellable data.
         msg = b"|".join(
             [
                 binding,
@@ -142,6 +166,8 @@ class CertificateAuthority:
                 str(int(epoch)).encode(),
                 repr(float(fa)).encode(),
                 b"none" if miss is None else repr(float(miss)).encode(),
+                repr(float(score)).encode(),
+                repr(float(threshold)).encode(),
             ]
         )
         return hmac.new(self._key, msg, _DIGEST).digest()
@@ -158,7 +184,10 @@ class CertificateAuthority:
     ) -> SafetyCertificate:
         binding = _bind(observation, action, self._epoch)
         nonce = secrets.token_bytes(16)
-        tag = self._tag(binding, nonce, self._epoch, false_alarm_bound, miss_bound)
+        tag = self._tag(
+            binding, nonce, self._epoch, false_alarm_bound, miss_bound,
+            score, threshold,
+        )
         return SafetyCertificate(
             binding=binding,
             epoch=self._epoch,
@@ -177,8 +206,45 @@ class CertificateAuthority:
             cert.epoch,
             cert.false_alarm_bound,
             cert.miss_bound,
+            cert.score,
+            cert.threshold,
         )
         return hmac.compare_digest(expected, cert.tag)
+
+
+# --------------------------------------------------------------------------- #
+
+
+class CertificateVerifier:
+    """Read-only view of an authority: check a tag, read the epoch. No mint.
+
+    This is what :class:`ActionGate` hands out, because the gate's guarantee is
+    that the *policy cannot mint its own permission*. Exposing the authority
+    itself would hand out a mint oracle that performs no score, threshold or
+    cover check -- enough to manufacture a verifying certificate for any
+    observation/action pair on a gate that would otherwise always abstain.
+
+    Scope, stated plainly: this removes minting from the gate's **API
+    surface**. It is not memory isolation, and no such claim is made -- in
+    CPython, code running in-process can always reach a private attribute or a
+    closure cell. The separation this models is deployment-level (the authority
+    living in its own process or an HSM, reachable only by an authenticated
+    request); in-process, the guarantee is that no supported call sequence
+    yields a certificate the gate did not itself authorize.
+    """
+
+    __slots__ = ("_authority",)
+
+    def __init__(self, authority: "CertificateAuthority") -> None:
+        self._authority = authority
+
+    @property
+    def epoch(self) -> int:
+        return self._authority.epoch
+
+    def verify(self, cert: SafetyCertificate) -> bool:
+        """True iff this certificate's tag authenticates under the CA's key."""
+        return self._authority.verify(cert)
 
 
 # --------------------------------------------------------------------------- #
@@ -217,12 +283,38 @@ class ActionGate:
         false_alarm_bound: float,
         safe_action: Any,
         claim: TwoSidedClaim | None = None,
-        authority: CertificateAuthority | None = None,
         cover: Callable[[Any], bool] | None = None,
     ) -> None:
-        self._authority = authority or CertificateAuthority()
-        self._threshold = float(threshold)
-        self._fa_bound = float(false_alarm_bound)
+        # The gate mints its own authority and never accepts one. An injected
+        # authority was an override path in two directions at once: a
+        # duck-typed (or subclassed) object whose verify() returns True makes
+        # the gate accept anything, and even a genuine CertificateAuthority
+        # leaves the *caller* holding mint() -- an oracle that applies no
+        # score, threshold or cover check -- for the very instance this gate
+        # verifies against. Owning the authority outright is what makes "the
+        # policy cannot mint its own permission" true rather than aspirational:
+        # a caller's own CertificateAuthority has a different key, so nothing
+        # it mints will verify here.
+        self._authority = CertificateAuthority()
+        thr = float(threshold)
+        fa = float(false_alarm_bound)
+        if not np.isfinite(thr):
+            # `score > threshold` is False for NaN and for +inf, so a
+            # non-finite threshold silently certifies every score presented --
+            # the strict-off switch this class's docstring denies exists.
+            raise ValueError(
+                f"threshold must be finite; got {threshold!r}. A non-finite "
+                f"threshold makes the abstention comparison vacuously false, "
+                f"so every score would certify."
+            )
+        if not (np.isfinite(fa) and 0.0 <= fa <= 1.0):
+            raise ValueError(
+                f"false_alarm_bound must be a probability in [0, 1]; got "
+                f"{false_alarm_bound!r}. It is recorded in every certificate "
+                f"this gate mints, so a meaningless value would be attested."
+            )
+        self._threshold = thr
+        self._fa_bound = fa
         self._claim = claim
         self._safe_action = safe_action
         self._spent: set[bytes] = set()
@@ -236,8 +328,9 @@ class ActionGate:
         self._cover = cover
 
     @property
-    def authority(self) -> CertificateAuthority:
-        return self._authority
+    def verifier(self) -> CertificateVerifier:
+        """A mint-free view of the authority, for auditing emitted decisions."""
+        return CertificateVerifier(self._authority)
 
     @property
     def log(self) -> tuple[GateDecision, ...]:
@@ -282,9 +375,14 @@ class ActionGate:
         monitor that cannot vouch for the action, which is indistinguishable
         from a monitor that says no.
         """
-        self._authority.advance()
-
         try:
+            # Inside the try: an authority whose advance() raises must abstain
+            # like any other internal failure. Outside it, the exception
+            # escaped step() and returned no GateDecision at all -- which a
+            # caller wrapping step() in its own except could turn back into an
+            # emission, defeating the promise in this docstring.
+            self._authority.advance()
+
             if self._cover is not None and not self._cover(observation):
                 decision = GateDecision(self._safe_action, True, "left certified domain")
                 self._log.append(decision)

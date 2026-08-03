@@ -21,12 +21,16 @@ import pytest
 
 from certabstain import (
     CoverTooSmall,
+    EnclosureError,
     Interval,
     MLP,
+    ModeIndeterminate,
+    NonFiniteEnclosure,
     TargetNotCertified,
     certify_epsilon,
 )
 from certabstain.discrepancy import (
+    EpsilonCertificate,
     MODE_IN,
     MODE_OUT,
     MODE_STRADDLE,
@@ -220,3 +224,93 @@ def test_certificate_bindings_and_freeze() -> None:
         cert.eps = np.zeros(1)  # type: ignore[misc]
     with pytest.raises((ValueError, RuntimeError)):
         cert.eps[0] = 99.0
+
+
+def test_refuses_when_the_bound_computation_loses_finiteness() -> None:
+    """Spec 7.9 on the certification path itself, not just in the substrate.
+
+    A reference whose enclosure goes non-finite must refuse by name: the gap
+    bound would otherwise be computed from an infinite endpoint and come out
+    as a number that means nothing.
+    """
+
+    def infinite_ref(lo, hi):
+        n = lo.shape[0]
+        return np.full((n, 1), -np.inf), np.full((n, 1), np.inf)
+
+    with pytest.raises(NonFiniteEnclosure, match="finiteness"):
+        certify_epsilon(
+            NET,
+            infinite_ref,
+            DOMAIN,
+            reference_id="non-finite reference (spec 7.9 path test)",
+            target=None,
+            max_leaf_evals=1_000,
+        )
+
+
+def test_refusal_types_of_spec_7_items_3_and_9_are_distinguishable() -> None:
+    """Spec section 7's opening claim, made checkable.
+
+    "Each is a distinct exception or a distinct abstention reason" -- items 3
+    (mode indeterminate) and 9 (non-finite) both used to be a bare
+    EnclosureError, so a caller could only tell them apart by matching message
+    text. They now have distinct types, and neither catches the other.
+    """
+    assert issubclass(ModeIndeterminate, EnclosureError)
+    assert issubclass(NonFiniteEnclosure, EnclosureError)
+    assert not issubclass(ModeIndeterminate, NonFiniteEnclosure)
+    assert not issubclass(NonFiniteEnclosure, ModeIndeterminate)
+
+    # ...and code written against the old broad class still works.
+    with pytest.raises(EnclosureError):
+        Interval(np.nan, 1.0)
+
+
+def test_certificate_refuses_a_non_finite_epsilon() -> None:
+    """An unbounded epsilon is vacuous, not conservative.
+
+    The gap-bound guard only checked two of the four endpoints it reads, so a
+    reference that went infinite on one side alone produced eps=inf and the
+    certificate was minted and handed out. Both halves are closed: the guard
+    checks all four, and the dataclass refuses the value whatever produced it.
+    """
+
+    def half_infinite_ref(lo, hi):
+        n = lo.shape[0]
+        return np.full((n, 1), -np.inf), np.zeros((n, 1))
+
+    with pytest.raises(NonFiniteEnclosure):
+        certify_epsilon(
+            NET,
+            half_infinite_ref,
+            DOMAIN,
+            reference_id="half-infinite reference (spec 7.9)",
+            target=None,
+            max_leaf_evals=1_000,
+        )
+
+    with pytest.raises(NonFiniteEnclosure, match="vacuous"):
+        EpsilonCertificate(
+            eps=np.array([np.inf]),
+            domain_lo=np.zeros(2), domain_hi=np.ones(2),
+            cover_lo=np.zeros((1, 2)), cover_hi=np.ones((1, 2)),
+            cover_fraction=1.0, net_hash="x", reference_id="x",
+            empirical_floor=np.zeros(1), n_leaf_evals=0, n_leaves=1, target=None,
+        )
+
+
+def test_certificate_arrays_cannot_be_mutated_through_a_caller_view() -> None:
+    """setflags(write=False) on the result of np.asarray protected nothing:
+    asarray returns the caller's own object when it is already float64, so a
+    view the caller kept still reached the writable base."""
+    base = np.array([0.5, 0.5])
+    cert = EpsilonCertificate(
+        eps=base[:1], domain_lo=np.zeros(2), domain_hi=np.ones(2),
+        cover_lo=np.zeros((1, 2)), cover_hi=np.ones((1, 2)),
+        cover_fraction=1.0, net_hash="x", reference_id="x",
+        empirical_floor=np.zeros(1), n_leaf_evals=0, n_leaves=1, target=None,
+    )
+    before = float(cert.eps[0])
+    base[0] = 999.0                      # mutate through the base array
+    assert float(cert.eps[0]) == before, "certificate eps changed under it"

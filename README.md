@@ -42,31 +42,78 @@ certificate that asserts a bound it cannot support.
 
 ## Install and run
 
+Development happens in a project-local venv at `certabstain/.venv`, not the
+shared workspace one directory up. From `~/Downloads/certabstain`:
+
 ```bash
-cd certabstain
-pip install numpy scipy pytest
-python -m pytest tests/ -q          # 29 tests
-PYTHONPATH=. python demo/demo.py
+# full suite -- 117 tests
+VIRTUAL_ENV="$(pwd)/.venv" uv run --active --no-sync pytest -q
+
+# bare scripts need PYTHONPATH so `certabstain` resolves as a package
+# one directory up; pytest above does not
+VIRTUAL_ENV="$(pwd)/.venv" PYTHONPATH="$(dirname "$(pwd)")" \
+    uv run --active --no-sync python demo.py
 ```
+
+Runtime dependency is numpy alone; `matplotlib`, `scipy`, `onnx`,
+`onnxruntime`, and `mpmath` are dev-group extras used by the sweeps, the
+Clopper-Pearson interval in `soundness.py`, and the VNNLIB export.
+
+`TECHNICAL_NOTE.md` is the Phase 2 write-up: the L1-L4 lemma chain, the
+stiffness-boundary result, the planar-pushing numbers, and which script
+reproduces which artifact.
 
 ## Usage
 
 ```python
-from certabstain import build_monitor, CertifiedModelErrorWitness
+from certabstain import (
+    ActionGate, VerifiedDiscrepancyWitness, build_monitor, certify_epsilon,
+)
 
+# 1. PRODUCE epsilon -- branch-and-bound the network against an
+#    interval-extendable reference over a declared domain. Refuses if the
+#    certified cover falls below the declared minimum fraction.
+cert = certify_epsilon(
+    net, clearance.interval_batch, domain,
+    reference_id=clearance.reference_id(),
+    ref_float=clearance.value,
+    target=None, max_leaf_evals=80_000,
+)
+
+# 2. BIND it -- weight hash and reference identity re-checked here, so a
+#    single flipped weight byte refuses at load rather than at runtime.
+witness = VerifiedDiscrepancyWitness.bind(cert, net, clearance.reference_id())
+
+# 3. Calibrate the false-alarm side on nominal rollouts only.
 monitor = build_monitor(
     nominal_trajectories=calib_rollouts,  # per-timestep scores, SUCCESSES ONLY
     alpha=0.01,                           # false-alarm budget per rollout
-    witness=CertifiedModelErrorWitness(epsilon=0.05),
+    witness=witness,
     shift_budget=0.002,                   # total-variation ball radius
     safe_action=STOP,
 )
 print(monitor.describe())
 
-decision = monitor.step(observation=obs, proposed_action=a, score=s)
+decision = monitor.step(
+    observation=obs, proposed_action=a, score=witness.score(g_hat)
+)
 if decision.abstained:
     handoff(decision.reason)
 ```
+
+Passing `witness.covers` to the gate adds cover-membership abstention, so a
+state outside the certified domain reports `left certified domain` instead of
+a score the certificate never covered:
+
+```python
+gate = ActionGate(
+    threshold=0.0, false_alarm_bound=0.01, safe_action=STOP, cover=witness.covers,
+)
+```
+
+`CertifiedModelErrorWitness(epsilon=...)` still exists and takes `epsilon` on
+faith. It is the Phase 1 interface, kept for the demo's cautionary section;
+prefer the produced bound above.
 
 ## What is guaranteed
 
@@ -113,9 +160,21 @@ The gate is not a function the control loop is supposed to call. It is the only
 object that can produce an actuator command, and it will not produce one
 without a certificate that verifies, is bound to the current epoch, binds the
 exact observation and action, and has not been used before. The policy never
-holds the signing key. There is no `force=`, `override=`, or `strict=False`
-anywhere in the API, and a test asserts that the public surface stays that way.
-Any exception in the path fails closed to the safe action.
+holds the signing key: the gate mints its own authority and accepts none from
+outside, and hands out only a `CertificateVerifier`, which checks a tag but
+cannot mint one. There is no `force=`, `override=`, or `strict=False` anywhere
+in the API; a non-finite `threshold` is refused at construction, because
+`score > nan` is false and would certify everything; and an allowlist-based
+signature scan pins every public member and parameter of every class the gate
+module exports, plus `__slots__`, so neither a new parameter nor a public
+instance attribute can appear unnoticed. Any exception in the path — including
+one raised by the authority itself — fails closed to the safe action.
+
+The honest scope: that is a statement about the **API surface**, not memory
+isolation. No supported call sequence yields an uncertified emission or a
+certificate the gate did not authorize. Code already running inside the same
+Python process can always reach a private attribute; the deployment form of
+that separation is an authority in its own process or an HSM.
 
 ## Novelty relative to prior art
 
@@ -133,21 +192,47 @@ get a real freedom-to-operate search first.
 
 ## Layout
 
+Flat package; tests sit beside the modules they cover.
+
 ```
 certabstain/
-  conformal.py   split conformal, Mondrian group-conditional, shift inflation
-  soundness.py   witnesses and the two-sided composition
-  gate.py        certificate authority and the non-bypassable action gate
-  errors.py      every failure mode is a distinct, catchable refusal
-tests/           29 tests; coverage theorems validated by Monte Carlo
-demo/            baseline vs. certified, including where the guarantee stops
+  conformal.py              split conformal, Mondrian group-conditional, shift inflation
+  soundness.py              witnesses and the two-sided composition
+  gate.py                   certificate authority and the non-bypassable action gate
+  errors.py                 every failure mode is a distinct, catchable refusal
+
+  interval.py               sound interval arithmetic under outward rounding      (L1)
+  nnbound.py                IBP / CROWN bound propagation for the network
+  reference.py              interval-extendable reference models + identity strings
+  discrepancy.py            adaptive branch-and-bound certified epsilon           (L2)
+  tube.py                   K-step interval tube + discrete-Gronwall comparison   (L3)
+  witness2.py               predictive witness, cover-membership gating           (L4)
+  certified_composition.py  the produced-epsilon two-sided claim
+  vnnlib.py                 VNNLIB/ONNX export for out-of-band re-verification
+
+  test_*.py                 117 tests: theorem validation (Monte Carlo +
+                            adversarial corners), refusal coverage, freeze tests
+  demo.py                   baseline vs. certified, including where the guarantee stops
+  stiffness_sweep.py        M2 single-step enclosure vs. stiffness
+  tube_sweep.py             M4 certified-horizon collapse
+  scaling_study.py          M6 input-dimension and horizon scaling
+  artifacts/                committed results; artifacts/vnnlib/ is the external cross-check
 ```
 
 ## Next
 
-1. Reproduce SAFE/FIPER/FAIL-Detect on the public SAFE rollout sets and drop
+Item 2 below is what Phase 2 was: `epsilon` is now produced by
+`certify_epsilon` and the reachable-tube route is implemented (`tube.py`,
+`witness2.py`), certified through planar pushing per-mode. What remains:
+
+1. Re-verify `artifacts/vnnlib/` out-of-band with α,β-CROWN. Expected verdict
+   is `unsat`/`safe` on every instance; a single `sat` is a soundness
+   counterexample and a release blocker. Not yet run — see
+   `artifacts/vnnlib/RUN.md`.
+2. Reproduce SAFE/FIPER/FAIL-Detect on the public SAFE rollout sets and drop
    this monitor in alongside them on the same data.
-2. Replace `CertifiedModelErrorWitness` with a real certified bound on a
-   learned contact/dynamics model — the reachable-tube route.
 3. Mechanize the soundness argument in Lean so the composition itself is
    machine-checked, not just the code that implements it.
+4. Professional freedom-to-operate search before any filing (see
+   `PROVISIONAL_OUTLINE.md`, which is an engineering draft for attorney
+   review and not legal advice).
