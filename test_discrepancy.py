@@ -300,6 +300,58 @@ def test_certificate_refuses_a_non_finite_epsilon() -> None:
         )
 
 
+def test_refuses_a_reference_that_returns_an_inverted_interval() -> None:
+    """An empty reference interval shrinks the bound instead of widening it.
+
+    This is the one unsound direction: with ``rlo > rhi`` both ``nhi - rlo``
+    and ``rhi - nlo`` get *smaller*, so the certifier would mint a too-small
+    eps and claim more than it verified. Nothing downstream would notice --
+    the value is finite, correctly shaped, and monotone-looking. The refusal
+    is an EnclosureError but specifically not the non-finite subclass, so a
+    caller can tell "your reference is broken" from "shrink your boxes".
+    """
+
+    def inverted_ref(lo, hi):
+        n = lo.shape[0]
+        return np.ones((n, 1)), np.zeros((n, 1))  # finite, right shape, lo > hi
+
+    with pytest.raises(EnclosureError, match="inverted") as exc:
+        certify_epsilon(
+            NET,
+            inverted_ref,
+            DOMAIN,
+            reference_id="inverted reference",
+            target=None,
+            max_leaf_evals=1_000,
+        )
+    assert not isinstance(exc.value, NonFiniteEnclosure)
+
+
+def test_refuses_a_reference_whose_shape_would_broadcast() -> None:
+    """A (B, 1) return against a multi-output net is silently wrong.
+
+    NumPy broadcasts it across every output dimension, so all outputs get
+    certified against one reference channel and the certificate covers
+    dimensions the reference never described. Shape is checked rather than
+    trusted, because broadcasting fails open here.
+    """
+    net = MLP.random((2, 8, 3), activation="relu", rng=np.random.default_rng(0))
+
+    def one_channel_ref(lo, hi):
+        n = lo.shape[0]
+        return np.zeros((n, 1)), np.ones((n, 1))  # would broadcast to (n, 3)
+
+    with pytest.raises(EnclosureError, match="shape"):
+        certify_epsilon(
+            net,
+            one_channel_ref,
+            DOMAIN,
+            reference_id="single-channel reference against 3 outputs",
+            target=None,
+            max_leaf_evals=1_000,
+        )
+
+
 def test_certificate_arrays_cannot_be_mutated_through_a_caller_view() -> None:
     """setflags(write=False) on the result of np.asarray protected nothing:
     asarray returns the caller's own object when it is already float64, so a

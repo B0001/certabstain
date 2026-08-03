@@ -103,15 +103,53 @@ def _batched_ibp(net: MLP, lo: np.ndarray, hi: np.ndarray):
     raise AssertionError("unreachable")
 
 
+def _ref_enclosure(net, ref: RefFn, lo, hi):
+    """Call a caller-supplied ``ref`` and check what it returned is an enclosure.
+
+    ``RefFn``'s contract says "sound enclosures", but a certifier does not get
+    to assume its inputs -- that assumption is exactly what the ``_gap_bound``
+    finiteness bug came down to. Ordering is checked as well as finiteness,
+    because an inverted (empty) interval is worse than a vacuous one: with
+    ``rlo > rhi`` both ``nhi - rlo`` and ``rhi - nlo`` shrink, so the returned
+    bound comes out *too small* rather than too large. That is unsound in the
+    direction that matters, and it is silent.
+
+    Shape is checked too: a ``(B, 1)`` return against a multi-output net
+    broadcasts rather than failing, quietly certifying every output dimension
+    against a single reference channel.
+    """
+    rlo, rhi = ref(lo, hi)
+    rlo = np.asarray(rlo, dtype=np.float64)
+    rhi = np.asarray(rhi, dtype=np.float64)
+    want = (lo.shape[0], net.n_outputs)
+    if rlo.shape != want or rhi.shape != want:
+        raise EnclosureError(
+            f"reference returned shapes {rlo.shape}/{rhi.shape}; this net needs "
+            f"{want}. A mismatched shape broadcasts instead of failing, which "
+            "would certify several output dimensions against one reference."
+        )
+    if not (np.all(np.isfinite(rlo)) and np.all(np.isfinite(rhi))):
+        raise NonFiniteEnclosure(
+            "reference enclosure lost finiteness; shrink boxes"
+        )
+    if np.any(rlo > rhi):
+        raise EnclosureError(
+            "reference returned an inverted interval (lo > hi) on at least one "
+            "box. An empty interval shrinks the discrepancy bound rather than "
+            "widening it, so the resulting epsilon would be unsound."
+        )
+    return rlo, rhi
+
+
 def _gap_bound(net, ref: RefFn, lo, hi):
     """Two-enclosure per-box bound on |g_hat - g|: (B, n_out)."""
     nlo, nhi = _batched_ibp(net, lo, hi)
-    rlo, rhi = ref(lo, hi)
+    rlo, rhi = _ref_enclosure(net, ref, lo, hi)
     # All four endpoints, not just two: the returned bound reads nhi and rlo as
     # well, so checking only (nlo, rhi) let a half-infinite reference through
     # and minted a certificate with eps = inf -- vacuous, and sound only in the
     # useless sense. Spec 7.9 says non-finite *anywhere* on the path refuses.
-    if not all(np.all(np.isfinite(a)) for a in (nlo, nhi, rlo, rhi)):
+    if not all(np.all(np.isfinite(a)) for a in (nlo, nhi)):
         raise NonFiniteEnclosure("bound computation lost finiteness; shrink boxes")
     return np.maximum(_up(nhi - rlo), _up(rhi - nlo))
 
@@ -378,7 +416,9 @@ def certify_epsilon(
                 Interval(cov_lo[i], cov_hi[i]),
                 experimental=(net.activation == "tanh"),
             )
-            rlo, rhi = ref(cov_lo[i][None, :], cov_hi[i][None, :])
+            rlo, rhi = _ref_enclosure(
+                net, ref, cov_lo[i][None, :], cov_hi[i][None, :]
+            )
             u2 = np.maximum(_up(fin.hi - rlo[0]), _up(rhi[0] - fin.lo))
             cov_u[i] = np.minimum(cov_u[i], u2)  # both sound; min is sound
         evals += order.shape[0]
