@@ -101,15 +101,21 @@ if decision.abstained:
     handoff(decision.reason)
 ```
 
-Passing `witness.covers` to the gate adds cover-membership abstention, so a
-state outside the certified domain reports `left certified domain` instead of
-a score the certificate never covered:
+Cover-membership abstention means a state outside the certified domain reports
+`left certified domain` instead of a score the certificate never covered.
+`build_monitor` wires this for you from the witness — a witness whose
+guarantee holds only inside a certified domain (W1/W2) supplies its own
+`covers`, and one with no certified region (`CertifiedModelErrorWitness`) has
+none, so nothing is invented. Building the gate directly, pass it yourself:
 
 ```python
 gate = ActionGate(
     threshold=0.0, false_alarm_bound=0.01, safe_action=STOP, cover=witness.covers,
 )
 ```
+
+Until 2026-08-03 `build_monitor` dropped the predicate, so this check was only
+ever active on the hand-built route above; see §6 of `TECHNICAL_NOTE.md`.
 
 `CertifiedModelErrorWitness(epsilon=...)` still exists and takes `epsilon` on
 faith. It is the Phase 1 interface, kept for the demo's cautionary section;
@@ -221,18 +227,24 @@ certabstain/
 
 ## Next
 
-Item 2 below is what Phase 2 was: `epsilon` is now produced by
-`certify_epsilon` and the reachable-tube route is implemented (`tube.py`,
-`witness2.py`), certified through planar pushing per-mode. What remains:
+Phase 2 is done: `epsilon` is now produced by `certify_epsilon` and the
+reachable-tube route is implemented (`tube.py`, `witness2.py`), certified
+through planar pushing per-mode.
 
-1. Re-verify `artifacts/vnnlib/` out-of-band with α,β-CROWN. Expected verdict
-   is `unsat`/`safe` on every instance; a single `sat` is a soundness
-   counterexample and a release blocker. Not yet run — see
-   `artifacts/vnnlib/RUN.md`.
-2. Reproduce SAFE/FIPER/FAIL-Detect on the public SAFE rollout sets and drop
+The out-of-band α,β-CROWN re-verification of `artifacts/vnnlib/`, listed here
+as outstanding until 2026-08-03, **has been run: `unsat` on all 24 instances**
+(α,β-CROWN 0.7.0, CPU, `double_fp: true`; verdicts in
+`artifacts/abcrown_run_2026-08-03.json`). Run it in float64 — at the verifier's
+float32 default, `net_15` returns a spurious `sat`, explained in
+`artifacts/vnnlib/RUN.md`. This is one verifier on one machine on one run, so
+it is a cross-check, not an independent audit.
+
+What remains:
+
+1. Reproduce SAFE/FIPER/FAIL-Detect on the public SAFE rollout sets and drop
    this monitor in alongside them on the same data.
-3. Mechanize the soundness argument in Lean so the composition itself is
+2. Mechanize the soundness argument in Lean so the composition itself is
    machine-checked, not just the code that implements it.
-4. Professional freedom-to-operate search before any filing (see
+3. Professional freedom-to-operate search before any filing (see
    `PROVISIONAL_OUTLINE.md`, which is an engineering draft for attorney
    review and not legal advice).
