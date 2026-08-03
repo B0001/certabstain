@@ -1,0 +1,71 @@
+{
+  "date": "2026-08-03",
+  "verifier": "alpha-beta-CROWN 0.7.0 (torch 2.11.0, CPU, macOS arm64)",
+  "commit_of_artifacts": "181c9a5",
+  "runs": {
+    "float64 (double_fp: true) -- authoritative": {
+      "net_00": "unsat",
+      "net_01": "unsat",
+      "net_02": "unsat",
+      "net_03": "unsat",
+      "net_04": "unsat",
+      "net_05": "unsat",
+      "net_06": "unsat",
+      "net_07": "unsat",
+      "net_08": "unsat",
+      "net_09": "unsat",
+      "net_10": "unsat",
+      "net_11": "unsat",
+      "net_12": "unsat",
+      "net_13": "unsat",
+      "net_14": "unsat",
+      "net_15": "unsat",
+      "net_16": "unsat",
+      "net_17": "unsat",
+      "net_18": "unsat",
+      "net_19": "unsat",
+      "net_20": "unsat",
+      "net_21": "unsat",
+      "net_22": "unsat",
+      "net_23": "unsat"
+    },
+    "float32 (abcrown default)": {
+      "net_00": "unsat",
+      "net_01": "unsat",
+      "net_02": "unsat",
+      "net_03": "unsat",
+      "net_04": "unsat",
+      "net_05": "unsat",
+      "net_06": "unsat",
+      "net_07": "unsat",
+      "net_08": "unsat",
+      "net_09": "unsat",
+      "net_10": "unsat",
+      "net_11": "unsat",
+      "net_12": "unsat",
+      "net_13": "unsat",
+      "net_14": "unsat",
+      "net_15": "sat",
+      "net_16": "unsat",
+      "net_17": "unsat",
+      "net_18": "unsat",
+      "net_19": "unsat",
+      "net_20": "unsat",
+      "net_21": "unsat",
+      "net_22": "unsat",
+      "net_23": "unsat"
+    }
+  },
+  "summary": {
+    "float64": {
+      "unsat": 24,
+      "sat": 0
+    },
+    "float32": {
+      "unsat": 23,
+      "sat": 1
+    }
+  },
+  "net_15_note": "float32 returns a spurious sat: PGD reports attack margin exactly 0.0 and 'Total number of violation: 0' -- a boundary tie, not an escape. True f64 margin 3.886e-15 vs f32 forward error 5.704e-07 (1.5e8x). Independently checked at 60005 points in the box via onnxruntime in float64: no violation.",
+  "caveat": "One verifier, one machine, one run. Not an independent audit."
+}
