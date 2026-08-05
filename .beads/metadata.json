@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "certabstain",
+  "project_id": "ea50c1a7-1607-4f7d-ae28-9983747b36ba"
+}
