@@ -20,3 +20,5 @@ wheels/
 
 .beads/interactions.jsonl
 .claude/settings.json
+
+sandbox.sh
