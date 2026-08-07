@@ -201,6 +201,19 @@ def test_tanh_requires_experimental_flag() -> None:
         fn(net, box, experimental=True)  # acknowledged -> proceeds
 
 
+def test_mlp_weights_cannot_be_unfrozen_via_setflags() -> None:
+    """Same setflags(write=False)-doesn't-stick hole as Interval (see
+    test_interval.test_interval_endpoints_cannot_be_unfrozen_via_setflags):
+    W/b previously owned their data, so a caller could re-enable WRITEABLE
+    and mutate a certified network's weights in place."""
+    net = MLP.random((2, 4, 2), rng=np.random.default_rng(3))
+    for W, b in net.weights:
+        with pytest.raises(ValueError, match="WRITEABLE"):
+            W.setflags(write=True)
+        with pytest.raises(ValueError, match="WRITEABLE"):
+            b.setflags(write=True)
+
+
 def test_network_construction_refusals() -> None:
     with pytest.raises(NonFiniteEnclosure, match="non-finite"):
         MLP(((np.array([[np.nan]]), np.zeros(1)),))

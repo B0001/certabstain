@@ -64,6 +64,23 @@ def _up(x: np.ndarray, steps: int = 1) -> np.ndarray:
     return x
 
 
+def _freeze(arr: np.ndarray) -> np.ndarray:
+    """Return an array that cannot be made writable again.
+
+    ``arr.setflags(write=False)`` looks like it freezes ``arr``, but ``arr``
+    still owns its data -- numpy lets any array that owns its data flip
+    WRITEABLE back to True on request, so a caller holding a reference can
+    silently undo the freeze (confirmed: ``a.setflags(write=True); a[0] = ...``
+    succeeds on a "frozen" array). A read-only *view* whose base is itself
+    read-only does not have this hole: numpy refuses to set WRITEABLE on a
+    view unless the base allows it. Round-tripping through ``bytes`` (which
+    has no WRITEABLE flag to flip) gives such a view and makes the freeze
+    permanent -- verified empirically that ``setflags(write=True)`` then
+    raises ValueError instead of succeeding.
+    """
+    return np.frombuffer(arr.tobytes(), dtype=arr.dtype).reshape(arr.shape)
+
+
 # --------------------------------------------------------------------------- #
 # The interval type
 # --------------------------------------------------------------------------- #
@@ -95,10 +112,8 @@ class Interval:
         if np.any(lo_arr > hi_arr):
             raise EnclosureError("interval lower endpoint exceeds upper endpoint")
 
-        lo_arr.setflags(write=False)
-        hi_arr.setflags(write=False)
-        self.lo = lo_arr
-        self.hi = hi_arr
+        self.lo = _freeze(lo_arr)
+        self.hi = _freeze(hi_arr)
         self._sealed = True
 
     def __setattr__(self, name: str, value) -> None:

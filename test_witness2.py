@@ -89,6 +89,25 @@ def test_bind_refuses_reference_parameter_mismatch() -> None:
         VerifiedDiscrepancyWitness.bind(cert, net, changed.reference_id())
 
 
+def test_direct_construction_bypassing_bind_is_rejected() -> None:
+    """bind() is documented as the only way to build a VerifiedDiscrepancyWitness,
+    but its A4/A1 checks need `net`/`reference_id`, which are not stored
+    fields -- confirmed empirically that the raw constructor previously built
+    a witness bound to a fake certificate whose matches_network() would have
+    returned False, skipping the checks entirely. The constructor now
+    requires an unexported bind() token."""
+    net, cert = _clearance_net_and_cert()
+    from certabstain.soundness import CertifiedModelErrorWitness
+
+    with pytest.raises(TypeError, match="bind"):
+        VerifiedDiscrepancyWitness(
+            certificate=cert, inner=CertifiedModelErrorWitness(epsilon=0.05)
+        )
+    # bind() itself is unaffected.
+    w = VerifiedDiscrepancyWitness.bind(cert, net, CLEAR.reference_id())
+    assert w.certificate is cert
+
+
 def test_covers_matches_certificate_contains() -> None:
     net, cert = _clearance_net_and_cert()
     w = VerifiedDiscrepancyWitness.bind(cert, net, CLEAR.reference_id())
@@ -421,6 +440,31 @@ def test_witness_refuses_a_nonsensical_requirement() -> None:
             PredictiveTubeWitness.build(
                 tube, clear.interval_batch, c_required=-5.0, required_horizon=bad
             )
+
+
+def test_direct_construction_bypassing_build_still_enforces_horizon() -> None:
+    """build() is documented as the only way to construct a
+    PredictiveTubeWitness, but the horizon check only needs stored fields
+    (tube, required_horizon) -- confirmed empirically that the raw
+    constructor previously built a witness with tube.horizon=0 <
+    required_horizon=3 and a justification() that falsely claimed the
+    requirement was met. __post_init__ now re-runs the same check build()
+    used to run."""
+    tube = _short_yv_tube()
+    with pytest.raises(HorizonTooShort, match="certifies 0"):
+        PredictiveTubeWitness(
+            tube=tube,
+            clearance_lo=np.zeros(1),
+            c_required=-5.0,
+            required_horizon=3,
+            clearance_id=None,
+        )
+    # A requirement the tube actually meets still constructs directly.
+    w = PredictiveTubeWitness(
+        tube=tube, clearance_lo=np.zeros(1), c_required=-5.0,
+        required_horizon=None, clearance_id=None,
+    )
+    assert w.required_horizon is None
 
 
 def test_horizon_refusal_fails_closed_inside_the_gate() -> None:

@@ -17,9 +17,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from certabstain import EnclosureError, Interval, ModeIndeterminate
+from certabstain import EnclosureError, Interval, ModeIndeterminate, NonFiniteEnclosure
 from certabstain.interval import istack
-from certabstain.reference import PusherSlider, SpringDamper2D
+from certabstain.reference import CircleClearance, PusherSlider, SpringDamper2D
 
 MODE_NAMES = ("stick", "slide_left", "slide_right")
 
@@ -209,6 +209,22 @@ def test_parameter_construction_refusals() -> None:
         SpringDamper2D(m=-1.0)
     with pytest.raises(EnclosureError):
         SpringDamper2D(k=np.nan)
+
+
+def test_reference_dataclasses_have_no_bypassable_factory() -> None:
+    """Unlike witness2.py/soundness.py/conformal.py, none of the reference
+    models here has a separate bind()/build()/fit() classmethod that carries
+    validation the raw constructor skips -- __post_init__ *is* the only
+    validation, and dataclass-generated __init__ always calls it, so the
+    'direct construction bypasses the factory' bug shape (see
+    test_certabstain.py::test_two_sided_claim_direct_construction_reruns_composes_check
+    and friends) has no foothold here. Confirmed for all three parameterized
+    models, including CircleClearance which test_parameter_construction_refusals
+    above does not cover."""
+    with pytest.raises(ValueError, match="positive"):
+        CircleClearance(r=-1.0)
+    with pytest.raises(NonFiniteEnclosure):
+        CircleClearance(ox=float("nan"))
 
 
 def test_unknown_mode_names_raise() -> None:

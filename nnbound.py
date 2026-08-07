@@ -37,7 +37,7 @@ from typing import Literal
 import numpy as np
 
 from .errors import EnclosureError, NonFiniteEnclosure
-from .interval import Interval, _down, _up, affine
+from .interval import Interval, _down, _freeze, _up, affine
 
 __all__ = ["MLP", "ibp_bounds", "crown_bounds", "jacobian_bounds"]
 
@@ -80,8 +80,8 @@ class MLP:
                 )
             if not (np.all(np.isfinite(W)) and np.all(np.isfinite(b))):
                 raise NonFiniteEnclosure(f"layer {k}: non-finite parameters")
-            W.setflags(write=False)
-            b.setflags(write=False)
+            W = _freeze(W)
+            b = _freeze(b)
             frozen.append((W, b))
             prev = W.shape[0]
         object.__setattr__(self, "weights", tuple(frozen))

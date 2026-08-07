@@ -17,6 +17,7 @@ from certabstain import (
     CertificateAuthority,
     CertificateVerifier,
     CertifiedModelErrorWitness,
+    DegenerateScores,
     EmpiricalPowerWitness,
     ForgedCertificate,
     GroupTooSmall,
@@ -114,6 +115,46 @@ def test_min_calibration_size_is_exact() -> None:
         SplitConformalCalibrator.fit(RNG.standard_normal(n), alpha)  # must succeed
         with pytest.raises(InsufficientCalibrationData):
             SplitConformalCalibrator.fit(RNG.standard_normal(n - 1), alpha)
+
+
+def test_split_conformal_direct_construction_rejects_nonsense_fields() -> None:
+    """fit() is documented as the only way to build a calibrator, but its
+    structural checks (alpha in (0,1), n>=1, order_statistic in [1,n],
+    threshold finite) don't need the raw scores -- confirmed empirically that
+    SplitConformalCalibrator(threshold=-999.0, alpha=5.0, n=-1,
+    order_statistic=999) previously constructed cleanly and its
+    coverage_lower/false_alarm_bound properties then reported nonsense
+    probabilities (-4.0, 5.0). Full data-consistency (that threshold really
+    is that order statistic of some real sample) can't be re-derived without
+    the raw scores, so this is deliberately narrower than fit()'s check --
+    see the class's __post_init__ docstring."""
+    with pytest.raises(ValueError, match="alpha"):
+        SplitConformalCalibrator(threshold=-999.0, alpha=5.0, n=-1, order_statistic=999)
+    with pytest.raises(InsufficientCalibrationData):
+        SplitConformalCalibrator(threshold=0.0, alpha=0.05, n=-1, order_statistic=1)
+    with pytest.raises(ValueError, match="order_statistic"):
+        SplitConformalCalibrator(threshold=0.0, alpha=0.05, n=10, order_statistic=999)
+    with pytest.raises(DegenerateScores):
+        SplitConformalCalibrator(
+            threshold=float("nan"), alpha=0.05, n=10, order_statistic=5
+        )
+    # A structurally valid construction still succeeds.
+    cal = SplitConformalCalibrator(threshold=1.0, alpha=0.05, n=10, order_statistic=10)
+    assert cal.coverage_lower == pytest.approx(0.95)
+
+
+def test_mondrian_direct_construction_rejects_inconsistent_alpha() -> None:
+    """Same bypass shape as SplitConformalCalibrator: a MondrianCalibrator
+    built directly (skipping fit()'s per-stratum minimum-size check, which
+    needs the raw scores and can't be re-derived) must still refuse an
+    internally inconsistent object -- one claiming an alpha that does not
+    match what its own per-stratum calibrators were fit at."""
+    inner = SplitConformalCalibrator.fit(RNG.standard_normal(400), alpha=0.05)
+    with pytest.raises(ValueError, match="alpha"):
+        MondrianCalibrator(thresholds={"a": inner}, alpha=0.01)
+    # Consistent alpha still succeeds.
+    mond = MondrianCalibrator(thresholds={"a": inner}, alpha=0.05)
+    assert mond.alpha == 0.05
 
 
 def test_refuses_shift_budget_at_or_above_alpha() -> None:
@@ -300,6 +341,33 @@ def test_margin_witness_floor_and_composition() -> None:
     assert claim.miss_bound == 0.0
     with pytest.raises(SoundnessNotEstablished):
         TwoSidedClaim.compose(threshold=0.1, false_alarm_bound=0.05, witness=w)
+
+
+def test_two_sided_claim_direct_construction_reruns_composes_check() -> None:
+    """compose() is documented as the only way to build a TwoSidedClaim, but
+    all the fields its floor-vs-threshold check needs (threshold,
+    violation_floor, miss_bound) are stored fields, so a caller bypassing
+    compose() entirely -- TwoSidedClaim(miss_bound=0.9, threshold=1.0,
+    violation_floor=0.5, ...) -- previously constructed cleanly even though
+    compose() would have raised SoundnessNotEstablished for the same
+    threshold/floor/miss combination. __post_init__ must catch it too."""
+    with pytest.raises(SoundnessNotEstablished, match="does not clear"):
+        TwoSidedClaim(
+            false_alarm_bound=0.05,
+            miss_bound=0.9,
+            threshold=1.0,
+            violation_floor=0.5,
+            justification="fake",
+        )
+    # A combination compose() would accept must still construct directly.
+    claim = TwoSidedClaim(
+        false_alarm_bound=0.05,
+        miss_bound=0.0,
+        threshold=-0.1,
+        violation_floor=0.0,
+        justification="fine",
+    )
+    assert claim.miss_bound == 0.0
 
 
 def test_empirical_power_witness_is_labelled_statistical() -> None:

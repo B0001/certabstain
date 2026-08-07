@@ -395,3 +395,20 @@ def test_certificate_arrays_cannot_be_mutated_through_a_caller_view() -> None:
     before = float(cert.eps[0])
     base[0] = 999.0                      # mutate through the base array
     assert float(cert.eps[0]) == before, "certificate eps changed under it"
+
+
+def test_certificate_arrays_cannot_be_unfrozen_via_setflags() -> None:
+    """setflags(write=False) alone protects nothing: an array that owns its
+    data can flip WRITEABLE back to True on request. See
+    test_interval.test_interval_endpoints_cannot_be_unfrozen_via_setflags for
+    the same hole in Interval; this is the discrepancy.py sibling."""
+    cert = EpsilonCertificate(
+        eps=np.array([0.5]), domain_lo=np.zeros(2), domain_hi=np.ones(2),
+        cover_lo=np.zeros((1, 2)), cover_hi=np.ones((1, 2)),
+        cover_fraction=1.0, net_hash="x", reference_id="x",
+        empirical_floor=np.zeros(1), n_leaf_evals=0, n_leaves=1, target=None,
+    )
+    for name in ("eps", "domain_lo", "domain_hi", "cover_lo", "cover_hi",
+                 "empirical_floor"):
+        with pytest.raises(ValueError, match="WRITEABLE"):
+            getattr(cert, name).setflags(write=True)

@@ -43,7 +43,7 @@ from .errors import (
     TargetNotCertified,
 )
 from .gate import _canonical
-from .interval import Interval, _down, _up, require_sound_environment
+from .interval import Interval, _down, _freeze, _up, require_sound_environment
 from .nnbound import MLP, crown_bounds
 
 __all__ = ["EpsilonCertificate", "certify_epsilon", "weights_hash", "MODE_IN",
@@ -191,8 +191,7 @@ class EpsilonCertificate:
             # writable through any view the caller kept -- so the read-only
             # flag below would protect nothing.
             arr = np.array(getattr(self, name), dtype=np.float64)
-            arr.setflags(write=False)
-            object.__setattr__(self, name, arr)
+            object.__setattr__(self, name, _freeze(arr))
         # A certificate asserting an infinite bound asserts nothing. Refuse at
         # construction so no such object can be handed out, whatever path
         # produced the number.

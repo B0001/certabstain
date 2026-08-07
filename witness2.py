@@ -25,7 +25,7 @@ must abstain rather than let a score computed there be trusted.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -53,6 +53,25 @@ class _RequireRequested:
 _REQUIRE_REQUESTED = _RequireRequested()
 
 
+class _BindToken:
+    """Sentinel proving construction went through :meth:`VerifiedDiscrepancyWitness.bind`.
+
+    ``bind()``'s checks (weight-hash match, reference-identity match) need
+    ``net`` and ``reference_id`` -- arguments that are not stored fields on
+    the witness, so unlike :class:`PredictiveTubeWitness` there is nothing
+    for a ``__post_init__`` to re-derive and re-check from the constructed
+    object alone. The only remaining guard is to make the raw constructor
+    require a token that only ``bind()`` holds, not exported from this
+    module.
+    """
+
+    def __repr__(self) -> str:  # pragma: no cover -- diagnostics only
+        return "<VerifiedDiscrepancyWitness.bind() token>"
+
+
+_BIND_TOKEN = _BindToken()
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedDiscrepancyWitness:
     """W1: a certified-epsilon witness, bound to the exact network and reference.
@@ -60,10 +79,22 @@ class VerifiedDiscrepancyWitness:
     Construct only through :meth:`bind`, which refuses (spec A4, A1) when the
     supplied network's weight-hash or the supplied reference's identity
     string does not match what the certificate was actually proven against.
+    The raw constructor additionally requires an unexported sentinel token
+    that only ``bind()`` can supply, so calling it directly -- skipping the
+    A4/A1 checks entirely -- raises rather than silently succeeding.
     """
 
     certificate: EpsilonCertificate
     inner: CertifiedModelErrorWitness
+    _token: object = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self._token is not _BIND_TOKEN:
+            raise TypeError(
+                "VerifiedDiscrepancyWitness cannot be constructed directly -- "
+                "that would skip the spec A4/A1 weight-hash and reference-"
+                "identity checks. Use VerifiedDiscrepancyWitness.bind(...)."
+            )
 
     @classmethod
     def bind(
@@ -86,7 +117,11 @@ class VerifiedDiscrepancyWitness:
                 f"proven against (spec A1)."
             )
         epsilon = float(np.max(certificate.eps))
-        return cls(certificate=certificate, inner=CertifiedModelErrorWitness(epsilon=epsilon))
+        return cls(
+            certificate=certificate,
+            inner=CertifiedModelErrorWitness(epsilon=epsilon),
+            _token=_BIND_TOKEN,
+        )
 
     # -- SoundnessWitness protocol ------------------------------------------- #
 
@@ -135,6 +170,52 @@ class PredictiveTubeWitness:
     required_horizon: int | None
     clearance_id: str | None
 
+    def __post_init__(self) -> None:
+        # All the fields this check needs (tube, required_horizon) are stored
+        # fields, so -- unlike VerifiedDiscrepancyWitness's bind() -- this can
+        # and must be re-validated here rather than only inside build():
+        # confirmed empirically that constructing PredictiveTubeWitness
+        # directly with tube.horizon=1 < required_horizon=5 previously
+        # produced a witness whose justification() falsely claimed "declared
+        # requirement 5, met".
+        required_horizon = self.required_horizon
+        if required_horizon is not None:
+            # `bool` is an `int` in Python, so `required_horizon=True` would
+            # otherwise read as "yes, require it" and quietly mean 1 -- the
+            # weakest requirement there is, and near enough to the unsafe
+            # default this argument exists to remove.
+            if (
+                isinstance(required_horizon, bool)
+                or int(required_horizon) != required_horizon
+                or required_horizon < 1
+            ):
+                raise ValueError(
+                    f"required_horizon must be a positive whole number of "
+                    f"steps; got {required_horizon!r}. Pass None to accept the "
+                    f"achieved horizon instead of a non-positive requirement."
+                )
+            required_horizon = int(required_horizon)
+            object.__setattr__(self, "required_horizon", required_horizon)
+            if required_horizon > self.tube.requested_horizon:
+                raise HorizonTooShort(
+                    f"this witness is declared to need {required_horizon} "
+                    f"steps of lookahead, but the tube was only propagated for "
+                    f"{self.tube.requested_horizon} (that many control boxes "
+                    f"were supplied), so the requirement is unreachable by "
+                    f"construction. Propagate the tube over the horizon the "
+                    f"deployment actually needs."
+                )
+            if self.tube.horizon < required_horizon:
+                raise HorizonTooShort(
+                    f"this witness is declared to need {required_horizon} "
+                    f"steps of lookahead; the tube certifies {self.tube.horizon}. "
+                    f"{self.tube.cover_exit_reason or 'The tube fell short of the requirement.'} "
+                    f"A witness built on it would score over t <= "
+                    f"{self.tube.horizon} while presenting the K-step guarantee. "
+                    f"Shrink the requirement, widen the certified cover, or "
+                    f"re-certify over a domain the tube stays inside."
+                )
+
     @classmethod
     def build(
         cls,
@@ -156,45 +237,13 @@ class PredictiveTubeWitness:
             fewer, or an explicit ``None`` to accept whatever the tube achieved
             (best effort, recorded in :meth:`justification` so the weaker claim
             is visible in the audit log rather than implied by silence).
+
+        The horizon requirement itself is enforced by ``__post_init__``, so
+        it applies equally to this factory and to a direct call to the
+        constructor.
         """
         if required_horizon is _REQUIRE_REQUESTED:
             required_horizon = tube.requested_horizon
-
-        if required_horizon is not None:
-            # `bool` is an `int` in Python, so `required_horizon=True` would
-            # otherwise read as "yes, require it" and quietly mean 1 -- the
-            # weakest requirement there is, and near enough to the unsafe
-            # default this argument exists to remove.
-            if (
-                isinstance(required_horizon, bool)
-                or int(required_horizon) != required_horizon
-                or required_horizon < 1
-            ):
-                raise ValueError(
-                    f"required_horizon must be a positive whole number of "
-                    f"steps; got {required_horizon!r}. Pass None to accept the "
-                    f"achieved horizon instead of a non-positive requirement."
-                )
-            required_horizon = int(required_horizon)
-            if required_horizon > tube.requested_horizon:
-                raise HorizonTooShort(
-                    f"this witness is declared to need {required_horizon} "
-                    f"steps of lookahead, but the tube was only propagated for "
-                    f"{tube.requested_horizon} (that many control boxes were "
-                    f"supplied), so the requirement is unreachable by "
-                    f"construction. Propagate the tube over the horizon the "
-                    f"deployment actually needs."
-                )
-            if tube.horizon < required_horizon:
-                raise HorizonTooShort(
-                    f"this witness is declared to need {required_horizon} "
-                    f"steps of lookahead; the tube certifies {tube.horizon}. "
-                    f"{tube.cover_exit_reason or 'The tube fell short of the requirement.'} "
-                    f"A witness built on it would score over t <= "
-                    f"{tube.horizon} while presenting the K-step guarantee. "
-                    f"Shrink the requirement, widen the certified cover, or "
-                    f"re-certify over a domain the tube stays inside."
-                )
 
         # The clearance geometry is a *second* reference, independent of the
         # dynamics one the tube carries, and nothing recorded it. Two witnesses

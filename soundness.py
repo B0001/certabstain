@@ -202,6 +202,30 @@ class TwoSidedClaim:
     violation_floor: float
     justification: str
 
+    def __post_init__(self) -> None:
+        # compose() is documented as the only way to build a sound claim, but
+        # every field its safety check needs (threshold, violation_floor,
+        # miss_bound) is a stored field -- so a caller bypassing compose() via
+        # the raw constructor (confirmed: TwoSidedClaim(miss_bound=0.9,
+        # threshold=1.0, violation_floor=0.5, ...) previously built cleanly)
+        # must be caught here, not just gated by compose()'s classmethod-only
+        # convention.
+        if (
+            self.miss_bound > 0.0
+            and self.violation_floor > float("-inf")
+            and self.threshold >= self.violation_floor
+        ):
+            raise SoundnessNotEstablished(
+                f"calibrated threshold {self.threshold:g} does not clear the "
+                f"violation floor {self.violation_floor:g}, so a violating state "
+                f"could score below the threshold and pass unflagged. The miss "
+                f"rate is unbounded and no two-sided claim is available.\n"
+                f"  witness: {self.justification}\n"
+                f"Remedies: tighten the certified model error, increase the "
+                f"nominal safety margin, or accept a larger alpha (a looser "
+                f"false-alarm budget lowers the threshold)."
+            )
+
     @classmethod
     def compose(
         cls,

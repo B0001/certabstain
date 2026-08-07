@@ -36,9 +36,11 @@ not measured, and with no failure data anywhere in the pipeline. Conformal
 calibration is then used only for what it is actually good at: bounding false
 alarms on the nominal distribution.
 
-The composition is checked at construction. If the calibrated threshold does
-not clear the floor, `TwoSidedClaim.compose` raises rather than returning a
-certificate that asserts a bound it cannot support.
+The composition is checked at construction — by `TwoSidedClaim.__post_init__`,
+so the check runs whether an instance comes from `TwoSidedClaim.compose` or
+is built directly. If the calibrated threshold does not clear the floor,
+construction raises rather than returning a certificate that asserts a bound
+it cannot support.
 
 ## Install and run
 
@@ -46,7 +48,7 @@ Development happens in a project-local venv at `certabstain/.venv`, not the
 shared workspace one directory up. From `~/Downloads/certabstain`:
 
 ```bash
-# full suite -- 136 tests
+# full suite -- 145 tests
 VIRTUAL_ENV="$(pwd)/.venv" uv run --active --no-sync pytest -q
 
 # bare scripts need PYTHONPATH so `certabstain` resolves as a package
@@ -216,7 +218,7 @@ certabstain/
   certified_composition.py  the produced-epsilon two-sided claim
   vnnlib.py                 VNNLIB/ONNX export for out-of-band re-verification
 
-  test_*.py                 136 tests: theorem validation (Monte Carlo +
+  test_*.py                 145 tests: theorem validation (Monte Carlo +
                             adversarial corners), refusal coverage, freeze tests
   demo.py                   baseline vs. certified, including where the guarantee stops
   stiffness_sweep.py        M2 single-step enclosure vs. stiffness

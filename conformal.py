@@ -132,6 +132,32 @@ class SplitConformalCalibrator:
     n: int
     order_statistic: int
 
+    def __post_init__(self) -> None:
+        # fit() is documented as the only way to build a calibrator, but its
+        # data-consistency check (threshold really is the order_statistic-th
+        # order stat of some real calibration sample) cannot be re-derived
+        # here -- the raw scores are not stored fields, only n and
+        # order_statistic are. What *can* and must be re-checked from stored
+        # fields alone is the structural invariants fit() also enforces:
+        # confirmed empirically that SplitConformalCalibrator(threshold=-999.0,
+        # alpha=5.0, n=-1, order_statistic=999) previously constructed
+        # cleanly and reported coverage_lower=-4.0, false_alarm_bound=5.0 --
+        # nonsense probabilities from a bypassed fit().
+        _check_alpha(self.alpha)
+        if self.n < 1:
+            raise InsufficientCalibrationData(
+                f"n must be a positive calibration sample size; got {self.n!r}"
+            )
+        if not (1 <= self.order_statistic <= self.n):
+            raise ValueError(
+                f"order_statistic must lie in [1, n]; got "
+                f"order_statistic={self.order_statistic!r}, n={self.n!r}"
+            )
+        if not math.isfinite(self.threshold):
+            raise DegenerateScores(
+                f"threshold must be finite; got {self.threshold!r}"
+            )
+
     @property
     def coverage_lower(self) -> float:
         """Proven lower bound on P(no false alarm)."""
@@ -206,6 +232,24 @@ class MondrianCalibrator:
 
     thresholds: Mapping[Hashable, SplitConformalCalibrator]
     alpha: float
+
+    def __post_init__(self) -> None:
+        # Same sibling-path hole as SplitConformalCalibrator: fit()'s
+        # per-stratum minimum-size check needs the raw per-group scores,
+        # which are not stored here, so it cannot be re-derived. But every
+        # per-stratum SplitConformalCalibrator is itself now self-validating
+        # (see its __post_init__), and a Mondrian object whose strata were
+        # calibrated at a different alpha than the one it claims is an
+        # internally inconsistent object that fit() never produces -- check
+        # that a direct constructor cannot introduce it either.
+        _check_alpha(self.alpha)
+        for group, calibrator in self.thresholds.items():
+            if calibrator.alpha != self.alpha:
+                raise ValueError(
+                    f"stratum {group!r} was calibrated at alpha="
+                    f"{calibrator.alpha!r}, which does not match this "
+                    f"MondrianCalibrator's alpha={self.alpha!r}"
+                )
 
     def calibrator_for(self, group: Hashable) -> SplitConformalCalibrator:
         try:

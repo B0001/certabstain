@@ -477,6 +477,97 @@ pass. Each guard added in the second pass was checked by disabling it and
 confirming its test fails — a guard whose test passes either way is not a
 guard.
 
+A third pass on 2026-08-07 found the same shape one level down: not a call
+site forgetting to pass a flag, but a safety invariant that lived only in a
+classmethod factory (`bind()`, `build()`, `compose()`, `fit()`) while the
+dataclass's own constructor — reachable directly, with no flag to forget —
+enforced nothing.
+
+- **`Interval.lo`/`.hi`, `MLP` weights, and `EpsilonCertificate`'s arrays were
+  not actually immutable.** `setflags(write=False)` looks like a freeze, but
+  an array that owns its data can flip `WRITEABLE` back to `True` on request
+  — confirmed empirically: `iv.lo.setflags(write=True); iv.lo[0] = 999.0`
+  silently succeeded on what §2 above calls "immutable after construction,"
+  including into an inverted `lo > hi` state the constructor itself would
+  have refused. Fixed by round-tripping every such array through `bytes`
+  (`interval._freeze`), which produces a view whose base has no `WRITEABLE`
+  flag to flip; `setflags(write=True)` on the result now raises `ValueError`
+  instead of succeeding. Covered by
+  `test_interval_endpoints_cannot_be_unfrozen_via_setflags`,
+  `test_mlp_weights_cannot_be_unfrozen_via_setflags`, and
+  `test_certificate_arrays_cannot_be_unfrozen_via_setflags`. "Immutable after
+  construction" in §2 is now true of the object, not just of the one call
+  path that used to set the flag.
+- **`TwoSidedClaim`'s floor-clearance check ran only in `compose()`.** Calling
+  the dataclass constructor directly — `TwoSidedClaim(miss_bound=0.9,
+  threshold=1.0, violation_floor=0.5, ...)` — built cleanly with no error,
+  producing an object that claims a zero miss rate while actually admitting
+  one. Every field the check needs (`threshold`, `violation_floor`,
+  `miss_bound`) is already a stored field, so the fix moves the check into
+  `__post_init__`, which every construction path runs. `compose()` is
+  unchanged; it now duplicates a check that no longer depends on going
+  through it. Covered by
+  `test_two_sided_claim_direct_construction_reruns_composes_check`.
+- **`PredictiveTubeWitness.build()`'s horizon check had the same hole**,
+  fixed the same way (moved into `__post_init__`, all inputs already stored
+  fields) — covered by
+  `test_direct_construction_bypassing_build_still_enforces_horizon`.
+  **`VerifiedDiscrepancyWitness.bind()`'s spec A1/A4 checks** need `net` and
+  `reference_id` values that are not stored on the resulting witness, so they
+  cannot be re-derived from stored fields the way the others were; that
+  factory now uses a private sentinel-token field only `bind()` can set,
+  matching the existing `_RequireRequested` idiom already in the same file
+  for "unset" defaults. Direct construction now raises `TypeError` before any
+  witness is produced. Covered by
+  `test_direct_construction_bypassing_bind_is_rejected`.
+- **`SplitConformalCalibrator.fit()` and `MondrianCalibrator.fit()` had the
+  same hole for their structural checks** (`alpha` range, `n >= 1`,
+  `order_statistic` in range, finite `threshold`; for Mondrian, every
+  stratum's `alpha` agreeing with the calibrator's own). Direct construction
+  — e.g. `SplitConformalCalibrator(threshold=-999.0, alpha=5.0, n=-1,
+  order_statistic=999)` — previously built cleanly and reported
+  `coverage_lower=-4.0`, a probability outside `[0, 1]`. Fixed with
+  `__post_init__` re-checks on both classes, covered by
+  `test_split_conformal_direct_construction_rejects_nonsense_fields` and
+  `test_mondrian_direct_construction_rejects_inconsistent_alpha`. This is
+  narrower than `fit()`'s full check: `fit()` also verifies `threshold` is a
+  genuine order statistic of the raw calibration sample, and the raw sample
+  is not a stored field, so that half cannot be re-derived from a
+  already-built calibrator. What's re-checked is every invariant that *can*
+  be checked from stored fields alone — recorded as a residual gap below,
+  not fixed by pretending otherwise.
+
+The same audit swept every other frozen dataclass in the package
+(`gate.py`'s `SafetyCertificate` and `GateDecision`, `tube.py`'s
+`TubeResult`, `reference.py`'s three parameter dataclasses, `nnbound.py`'s
+`MLP.random()`, `discrepancy.py`'s `EpsilonCertificate`/`certify_epsilon()`)
+for the same shape and found no further instance: `SafetyCertificate`'s
+guarantee is an HMAC tag checked by `CertificateVerifier`, not constructor
+validation, so a forged direct construction still fails `verify()`;
+`GateDecision` and `TubeResult` assert no invariant of their own; the
+reference models and `MLP.random()` have no factory beyond
+`__post_init__` to bypass; and `certify_epsilon()`'s two checks that are not
+re-derivable from `EpsilonCertificate`'s stored fields (`CoverTooSmall`,
+`TargetNotCertified`) are refusals about whether the *caller's* preferences
+were met, not about the soundness of the resulting `eps`/cover — bypassing
+them yields a certificate with a looser-than-requested or undersized-cover
+bound, not an unsound one, and `__post_init__` already re-checks the one
+invariant that is load-bearing for every consumer: `eps` must be finite.
+
+Two residual gaps, left as gaps rather than papered over: (1) the
+`SplitConformalCalibrator`/`MondrianCalibrator` re-check above cannot verify
+`threshold` is a real order statistic of *some* calibration sample, because
+the raw sample is never stored on the object; a caller can still hand-pick a
+structurally-valid-looking `(threshold, n, order_statistic)` triple that
+`fit()` would never have produced. (2) all of the sentinel-token and
+`__post_init__` guards in this pass are, like the gate's non-bypassability
+claim, statements about the supported API surface — code already running in
+the same process can still reach `object.__setattr__` or a private module
+attribute directly. Neither gap is new; both are the same "API surface, not
+memory isolation" scope the gate claim already declares in §2 and the
+project README, extended here to the same trust boundary applying to every
+frozen dataclass in the package, not just the gate's.
+
 The provisional-patent outline is a separate document, drafted in parallel
 by a different workstream, and is explicitly out of scope for this note —
 per spec §12, filing it is gated on a professional freedom-to-operate search

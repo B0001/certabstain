@@ -373,6 +373,21 @@ def test_interval_is_immutable() -> None:
         iv.injected = True
 
 
+def test_interval_endpoints_cannot_be_unfrozen_via_setflags() -> None:
+    """setflags(write=False) alone protects nothing: an array that owns its
+    data can flip WRITEABLE back to True on request, so a caller could
+    previously do ``iv.lo.setflags(write=True); iv.lo[0] = ...`` and mutate a
+    'frozen' Interval -- including into an inverted lo>hi state the
+    constructor would have rejected. The fix (interval._freeze) round-trips
+    through bytes so the array no longer owns its data and numpy refuses to
+    re-enable WRITEABLE."""
+    iv = Interval(np.zeros(3), np.ones(3))
+    with pytest.raises(ValueError, match="WRITEABLE"):
+        iv.lo.setflags(write=True)
+    with pytest.raises(ValueError, match="WRITEABLE"):
+        iv.hi.setflags(write=True)
+
+
 def test_self_test_passes_and_caches() -> None:
     rounding_self_test()
     require_sound_environment()

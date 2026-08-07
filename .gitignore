@@ -27,3 +27,6 @@ sandbox.sh
 \#*\#
 .\#*
 *~
+
+# Sandbox run output (see sandbox.sh)
+sandbox-handoff.md
