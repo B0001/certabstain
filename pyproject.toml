@@ -3,7 +3,10 @@ name = "certabstain"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+# 3.11, not 3.10: the dev group's onnxruntime>=1.28 publishes no 3.10 wheel, so
+# a >=3.10 floor makes the dev deps unresolvable. Runtime is numpy-only and the
+# pinned interpreter (.python-version, Dockerfile) is 3.12 regardless.
+requires-python = ">=3.11"
 dependencies = [
     "numpy>=2.2.6",
 ]
@@ -13,6 +16,14 @@ dependencies = [
 # parent directory on the path. Without this, setuptools' flat-layout discovery
 # sees `artifacts/` and `k8s/` as competing top-level packages and refuses to
 # build at all. Naming the one real package excludes them.
+# Needed so `uv run pytest` installs the project itself -- without a
+# build-system uv treats this as a non-package and `import certabstain` fails
+# at collection. The Dockerfile still uses the source tree via PYTHONPATH and
+# never builds this.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [tool.setuptools]
 packages = ["certabstain"]
 package-dir = { certabstain = "." }

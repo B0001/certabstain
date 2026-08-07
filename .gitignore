@@ -22,3 +22,8 @@ wheels/
 .claude/settings.json
 
 sandbox.sh
+
+# Emacs lock/autosave files
+\#*\#
+.\#*
+*~
