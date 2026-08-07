@@ -35,6 +35,7 @@ import numpy as np
 from certabstain import Interval, propagate_tube
 from certabstain.discrepancy import certify_epsilon
 from certabstain.nnbound import MLP, fit_mlp
+from certabstain.provenance import write_provenance_sidecar
 from certabstain.reference import SpringDamper2D
 
 OUT = Path(__file__).resolve().parent / "artifacts"
@@ -148,6 +149,7 @@ def main() -> None:
     OUT.mkdir(exist_ok=True)
     data = run_sweep()
     (OUT / "tube_sweep.json").write_text(json.dumps(data, indent=2))
+    write_provenance_sidecar(OUT / "tube_sweep.json", writer="tube_sweep.py")
     print(f"\nwrote {OUT / 'tube_sweep.json'}")
 
     n_killed = sum(r["kill_by_5"] for r in data["rows"])

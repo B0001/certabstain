@@ -27,6 +27,7 @@ no assumption about the policy or the score function.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 from typing import Hashable, Mapping, Sequence
@@ -39,6 +40,7 @@ from .errors import (
     InsufficientCalibrationData,
     ShiftBudgetExceeded,
 )
+from .gate import _canonical
 
 __all__ = [
     "rollout_scores",
@@ -48,6 +50,19 @@ __all__ = [
     "robust_level",
     "kl_worst_case",
 ]
+
+
+def _sample_digest(sorted_scores: np.ndarray) -> str:
+    """BLAKE2b over the canonical bytes of a *sorted* score array.
+
+    Mirrors ``discrepancy.weights_hash``'s construction. Digesting the sorted
+    array rather than fit-order means ``verify_sample`` can recompute a match
+    from any reordering of the same logged scores, not just the original
+    array object.
+    """
+    h = hashlib.blake2b(digest_size=32)
+    h.update(_canonical(np.asarray(sorted_scores, dtype=float)))
+    return h.hexdigest()
 
 
 # --------------------------------------------------------------------------- #
@@ -131,6 +146,15 @@ class SplitConformalCalibrator:
     alpha: float
     n: int
     order_statistic: int
+    sample_digest: str | None = None
+    """BLAKE2b-256 of the sorted calibration sample, set by :meth:`fit`.
+
+    ``None`` on any calibrator built before this field existed or by direct
+    construction without one -- both are legitimate (the field is optional
+    precisely so existing direct-construction call sites keep working), so
+    :meth:`verify_sample` treats a missing digest as "nothing to verify
+    against", not as tampering.
+    """
 
     def __post_init__(self) -> None:
         # fit() is documented as the only way to build a calibrator, but its
@@ -177,6 +201,54 @@ class SplitConformalCalibrator:
         """True iff this score should trigger abstention."""
         return float(score) > self.threshold
 
+    def verify_sample(self, scores: Sequence[float] | np.ndarray) -> bool:
+        """True iff ``scores`` is consistent with how this calibrator claims
+        to have been built.
+
+        This closes the gap noted on :meth:`__post_init__` -- but only
+        partially, and the partial-ness is the point, not an oversight.
+        Two things are checked, both against the ``scores`` the *caller*
+        supplies here, not against anything stored on ``self`` beyond the
+        digest and the four original fields:
+
+        1. ``scores``, sorted, hashes (BLAKE2b-256 over the canonical bytes)
+           to ``self.sample_digest`` -- i.e. it is (modulo hash collision)
+           the exact sorted array :meth:`fit` was given.
+        2. ``sorted(scores)[order_statistic - 1] == threshold`` -- i.e.
+           ``order_statistic`` genuinely indexes to ``threshold`` inside
+           *that* array, rather than ``order_statistic`` and ``threshold``
+           being two independently-asserted fields that happen to satisfy
+           the unrelated ``1 <= order_statistic <= n`` range check in
+           ``__post_init__``.
+
+        Together this proves ``threshold`` is a real order statistic of a
+        sample that hashes to ``sample_digest`` -- which is strictly more
+        than ``__post_init__`` alone can show. What it still does *not*
+        prove: that the sample the caller hands to ``verify_sample`` here is
+        the actual calibration rollout data collected at the time. A digest
+        proves consistency with whatever bytes you show it, not chain of
+        custody. Verifying a calibrator that was truthfully built from
+        `n` random rollouts still requires trusting whoever logged them, the
+        same way ``weights_hash`` proves byte-identity to a specific network
+        but not that the network is the intended policy. See
+        ``TECHNICAL_NOTE.md`` Sec. 6 for the residual-gap accounting.
+
+        Returns ``False`` (never raises) on any mismatch, including a
+        calibrator with no recorded digest -- fails closed rather than
+        treating "nothing to check against" as success.
+        """
+        if self.sample_digest is None:
+            return False
+        arr = np.asarray(scores, dtype=float)
+        if arr.ndim != 1 or arr.size != self.n:
+            return False
+        if not np.all(np.isfinite(arr)):
+            return False
+        ordered = np.sort(arr, kind="stable")
+        if _sample_digest(ordered) != self.sample_digest:
+            return False
+        return float(ordered[self.order_statistic - 1]) == self.threshold
+
     @classmethod
     def fit(
         cls, scores: Sequence[float] | np.ndarray, alpha: float
@@ -206,6 +278,7 @@ class SplitConformalCalibrator:
             alpha=float(alpha),
             n=int(n),
             order_statistic=int(k),
+            sample_digest=_sample_digest(ordered),
         )
 
 
@@ -264,6 +337,19 @@ class MondrianCalibrator:
 
     def fires(self, score: float, group: Hashable) -> bool:
         return self.calibrator_for(group).fires(score)
+
+    def verify_sample(
+        self, group: Hashable, scores: Sequence[float] | np.ndarray
+    ) -> bool:
+        """Delegates to ``calibrator_for(group).verify_sample(scores)``.
+
+        Same scope and same caveats as
+        :meth:`SplitConformalCalibrator.verify_sample` -- checks the named
+        stratum's calibrator only. Raises :class:`GroupTooSmall` (via
+        ``calibrator_for``) for a group not present at calibration time,
+        rather than returning ``False`` for a question that was never asked.
+        """
+        return self.calibrator_for(group).verify_sample(scores)
 
     @property
     def false_alarm_bound(self) -> float:

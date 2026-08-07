@@ -35,6 +35,7 @@ import numpy as np
 from certabstain import Interval, MLP, propagate_tube
 from certabstain.discrepancy import _batched_ibp, certify_epsilon
 from certabstain.nnbound import fit_mlp
+from certabstain.provenance import write_provenance_sidecar
 from certabstain.reference import SpringDamper2D
 
 OUT = Path(__file__).resolve().parent / "artifacts"
@@ -190,6 +191,7 @@ def main() -> None:
 
     data = {"dimension_scaling": dim_rows, "horizon_scaling": horizon_row}
     (OUT / "scaling_study.json").write_text(json.dumps(data, indent=2))
+    write_provenance_sidecar(OUT / "scaling_study.json", writer="scaling_study.py")
     print(f"\nwrote {OUT / 'scaling_study.json'}")
 
     try:

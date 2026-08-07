@@ -46,6 +46,7 @@ from certabstain import (
 )
 from certabstain.discrepancy import MODE_IN, MODE_OUT, MODE_STRADDLE
 from certabstain.nnbound import fit_mlp
+from certabstain.provenance import write_provenance_sidecar
 
 # Mode-boundary recon (verified numerically, see task notes): this box lies
 # ~99.8% inside the stick mode for PusherSlider() defaults.
@@ -333,6 +334,7 @@ def test_write_report_artifact(net_and_cert) -> None:
     out_path = os.path.join(out_dir, "pushing_stick_report.json")
     with open(out_path, "w") as f:
         json.dump(report, f, indent=2)
+    write_provenance_sidecar(out_path, writer="test_pushing_stick.py")
 
     assert os.path.exists(out_path)
     assert meets_bar, report["verdict"]["reason"]

@@ -31,6 +31,7 @@ import numpy as np
 
 from .interval import Interval, _down, _up
 from .nnbound import MLP, crown_bounds, ibp_bounds
+from .provenance import write_provenance_sidecar
 
 __all__ = [
     "export_onnx",
@@ -313,4 +314,13 @@ def generate_artifact_set(
     (outdir / "instances.csv").write_text("\n".join(csv_rows) + "\n")
     (outdir / "bounds.json").write_text(json.dumps(manifest, indent=2))
     (outdir / "RUN.md").write_text(_RUN_MD)
+    # One sidecar for the whole generated set: bounds.json is the manifest
+    # that names every model/prop file this call wrote, so its provenance
+    # stands in for the directory's.
+    write_provenance_sidecar(
+        outdir / "bounds.json",
+        writer="vnnlib.generate_artifact_set",
+        n_instances=n,
+        seed=seed,
+    )
     return manifest

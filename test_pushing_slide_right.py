@@ -61,6 +61,7 @@ from certabstain import (
 )
 from certabstain.discrepancy import MODE_IN, MODE_OUT, MODE_STRADDLE
 from certabstain.nnbound import fit_mlp
+from certabstain.provenance import write_provenance_sidecar
 
 ALPHA = 0.05
 P = PusherSlider()  # defaults: a=0.05, c=0.03, mu=0.3, dt=0.01, py_max=0.04
@@ -474,6 +475,7 @@ def test_write_report_artifact() -> None:
     out_path = os.path.join(out_dir, "pushing_slide_right_report.json")
     with open(out_path, "w") as f:
         json.dump(report, f, indent=2)
+    write_provenance_sidecar(out_path, writer="test_pushing_slide_right.py")
 
     assert os.path.exists(out_path)
     assert meets_bar, report["verdict"]["reason"]

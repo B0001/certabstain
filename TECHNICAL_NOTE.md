@@ -559,7 +559,44 @@ Two residual gaps, left as gaps rather than papered over: (1) the
 `threshold` is a real order statistic of *some* calibration sample, because
 the raw sample is never stored on the object; a caller can still hand-pick a
 structurally-valid-looking `(threshold, n, order_statistic)` triple that
-`fit()` would never have produced. (2) all of the sentinel-token and
+`fit()` would never have produced.
+
+A 2026-08-07 addition narrows this gap without closing it. `fit()` now also
+records `sample_digest`, a BLAKE2b-256 hash of the sorted calibration sample
+(same construction as `discrepancy.weights_hash`), and both calibrators gained
+`verify_sample(scores)` (`MondrianCalibrator.verify_sample(group, scores)`
+delegates to the named stratum's calibrator). It recomputes the digest from
+an independently-supplied `scores` array and checks both that the digest
+matches and that `sorted(scores)[order_statistic - 1] == threshold`. A pass
+proves `threshold` is a genuine order statistic of a sample that hashes to
+`sample_digest` — strictly more than the bare structural re-check above can
+show. It does not prove:
+
+- that the `scores` handed to `verify_sample` are the actual rollout data
+  collected at calibration time — only that they hash to what `fit()`
+  recorded. A digest proves consistency with supplied bytes, not chain of
+  custody, the same way `weights_hash` proves byte-identity to a specific
+  network but not that the network is the intended policy.
+- that `order_statistic` is the *correct* index for this `alpha`/`n` via
+  `k = ceil((n + 1) * (1 - alpha))`. `order_statistic` and `threshold` can
+  still be edited together to point at a different-but-real position in the
+  same digested sample, and `verify_sample` accepts it — demonstrated
+  directly by `test_verify_sample_known_gap_same_index_different_k_still_verifies`,
+  which is a record of the gap, not a bug report.
+- anything, for a calibrator with `sample_digest=None` — every calibrator
+  built by direct construction without one, and every one built before this
+  field existed, has nothing recorded to check against, so `verify_sample`
+  fails closed (`False`) rather than treating "nothing to compare" as
+  success.
+
+Covered by `test_verify_sample_accepts_the_real_calibration_sample`,
+`test_verify_sample_rejects_a_different_sample`,
+`test_verify_sample_rejects_a_forged_threshold`,
+`test_verify_sample_false_when_no_digest_was_recorded`,
+`test_verify_sample_known_gap_same_index_different_k_still_verifies`, and
+`test_mondrian_verify_sample_delegates_per_stratum`.
+
+(2) all of the sentinel-token and
 `__post_init__` guards in this pass are, like the gate's non-bypassability
 claim, statements about the supported API surface — code already running in
 the same process can still reach `object.__setattr__` or a private module

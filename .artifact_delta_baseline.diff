@@ -1,0 +1,109 @@
+diff --git a/artifacts/pushing_slide_left_report.json b/artifacts/pushing_slide_left_report.json
+index bf9951e..27992f5 100644
+--- a/artifacts/pushing_slide_left_report.json
++++ b/artifacts/pushing_slide_left_report.json
+@@ -37,10 +37,10 @@
+     "floor_samples": 300000,
+     "n_leaf_evals_used": 301039,
+     "n_leaves": 239599,
+-    "cover_fraction": 0.9914779877290133,
+-    "eps": 0.005006783693294895,
+-    "empirical_floor": 0.0018397000655597136,
+-    "eps_to_floor_ratio": 2.721521723581405
++    "cover_fraction": 0.9914779877290132,
++    "eps": 0.00500678438099175,
++    "empirical_floor": 0.0018396994742884316,
++    "eps_to_floor_ratio": 2.721522972075806
+   },
+   "monitor": {
+     "alpha": 0.05,
+@@ -48,11 +48,11 @@
+     "n_calibration_rollouts": 999,
+     "n_eval_rollouts": 2000,
+     "horizon_per_rollout": 20,
+-    "calibration_threshold": -0.014849378875324285,
++    "calibration_threshold": -0.014849377689467168,
+     "measured_abstention_rate": 0.0565
+   },
+   "h_next_sample_stats": {
+-    "min": 0.007338267626259408,
++    "min": 0.007338267626259415,
+     "max": 0.039999799800521645,
+     "mean": 0.025262893459912117
+   },
+diff --git a/artifacts/pushing_slide_right_report.json b/artifacts/pushing_slide_right_report.json
+index 8c11392..3271870 100644
+--- a/artifacts/pushing_slide_right_report.json
++++ b/artifacts/pushing_slide_right_report.json
+@@ -34,7 +34,7 @@
+     "n_train_samples": 120000,
+     "data_seed": 7,
+     "fit_seed": 0,
+-    "train_mae": 8.810248911976555e-05
++    "train_mae": 8.810248911979678e-05
+   },
+   "certifier": {
+     "max_leaf_evals": 300000,
+@@ -42,9 +42,9 @@
+     "n_leaf_evals_used": 301039,
+     "n_leaves": 239599,
+     "cover_fraction": 0.9914779877290132,
+-    "eps": 0.0029466023375540056,
+-    "empirical_floor": 0.0016305771363665442,
+-    "eps_to_floor_ratio": 1.8070916559764805
++    "eps": 0.002946602337553943,
++    "empirical_floor": 0.0016305771363665789,
++    "eps_to_floor_ratio": 1.8070916559764036
+   },
+   "monitor": {
+     "alpha": 0.05,
+@@ -52,16 +52,16 @@
+     "n_calibration_rollouts": 999,
+     "n_eval_rollouts": 2000,
+     "horizon_per_rollout": 20,
+-    "calibration_threshold": -0.016927664654008145,
++    "calibration_threshold": -0.01692766465400814,
+     "measured_abstention_rate": 0.037
+   },
+   "second_seed_check": {
+     "purpose": "the pass on this mode should not depend on one lucky fit; these are the actual figures from a different data/fit seed",
+     "data_seed": 23,
+     "fit_seed": 11,
+-    "train_mae": 0.00015787495287834544,
+-    "eps": 0.00681789173043531,
+-    "empirical_floor": 0.0025041665421421076,
++    "train_mae": 0.0001578712925806082,
++    "eps": 0.006817888700386936,
++    "empirical_floor": 0.0025041631552673582,
+     "cover_fraction": 0.9914779877290132,
+     "measured_abstention_rate": 0.038,
+     "still_meets_bar": true
+diff --git a/artifacts/pushing_stick_report.json b/artifacts/pushing_stick_report.json
+index 7bff844..4c2e9f0 100644
+--- a/artifacts/pushing_stick_report.json
++++ b/artifacts/pushing_stick_report.json
+@@ -31,17 +31,17 @@
+       0.03
+     ]
+   },
+-  "eps": 0.001000852008067238,
+-  "empirical_floor": 0.0004090540733057285,
+-  "eps_over_floor": 2.4467474433855534,
+-  "cover_fraction": 0.9978324342519045,
++  "eps": 0.0010075556780341293,
++  "empirical_floor": 0.0004189114293719487,
++  "eps_over_floor": 2.405175909248175,
++  "cover_fraction": 0.9978324342519047,
+   "n_leaves": 126368,
+   "n_leaf_evals": 201120,
+   "alpha": 0.05,
+-  "abstention_rate": 0.0016,
++  "abstention_rate": 0.0018,
+   "twice_alpha": 0.1,
+   "verdict": {
+     "meets_M6_bar": true,
+-    "reason": "nominal abstention rate 0.0016 <= 2*alpha=0.1, with certified eps=0.001001 (cover 99.8%)"
++    "reason": "nominal abstention rate 0.0018 <= 2*alpha=0.1, with certified eps=0.001008 (cover 99.8%)"
+   }
+ }
+\ No newline at end of file

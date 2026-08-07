@@ -157,6 +157,88 @@ def test_mondrian_direct_construction_rejects_inconsistent_alpha() -> None:
     assert mond.alpha == 0.05
 
 
+def test_verify_sample_accepts_the_real_calibration_sample() -> None:
+    """fit() records a digest of its sorted input; verify_sample recomputes
+    it from an independently-supplied array and checks the order-statistic
+    index resolves to the stored threshold inside that array. Order of the
+    input to verify_sample must not matter -- it is sorted before hashing,
+    same as at fit time."""
+    scores = RNG.standard_normal(300)
+    cal = SplitConformalCalibrator.fit(scores, alpha=0.05)
+    assert cal.sample_digest is not None
+    assert cal.verify_sample(scores) is True
+    assert cal.verify_sample(RNG.permutation(scores)) is True
+
+
+def test_verify_sample_rejects_a_different_sample() -> None:
+    """A calibrator built from one sample must not verify against another,
+    even one of the same size and similar distribution."""
+    scores = RNG.standard_normal(300)
+    cal = SplitConformalCalibrator.fit(scores, alpha=0.05)
+    other = RNG.standard_normal(300)
+    assert cal.verify_sample(other) is False
+    forged = scores.copy()
+    forged[0] += 1.0
+    assert cal.verify_sample(forged) is False
+
+
+def test_verify_sample_rejects_a_forged_threshold() -> None:
+    """A hand-edited threshold that no longer matches
+    sorted(scores)[order_statistic - 1] must fail verification even though
+    the sample digest -- computed from the sample only, not the threshold --
+    would otherwise match."""
+    import dataclasses
+
+    scores = RNG.standard_normal(300)
+    cal = SplitConformalCalibrator.fit(scores, alpha=0.05)
+    forged = dataclasses.replace(cal, threshold=cal.threshold + 5.0)
+    assert forged.verify_sample(scores) is False
+
+
+def test_verify_sample_false_when_no_digest_was_recorded() -> None:
+    """A calibrator built by direct construction (the pre-digest, and still
+    supported, construction path -- see the field's docstring) has
+    sample_digest=None. verify_sample has nothing to check against and must
+    fail closed (False), not raise and not silently claim success."""
+    cal = SplitConformalCalibrator(threshold=1.0, alpha=0.05, n=10, order_statistic=10)
+    assert cal.sample_digest is None
+    assert cal.verify_sample(np.linspace(-1, 1, 10)) is False
+
+
+def test_verify_sample_known_gap_same_index_different_k_still_verifies() -> None:
+    """Honest documentation of what verify_sample does NOT prove, as code:
+    order_statistic and threshold can be edited *together*, consistently,
+    to point at a different-but-still-real position in the same digested
+    sample. verify_sample only proves threshold is *a* real order statistic
+    of the digested sample -- not that it is the *correct* one for this
+    alpha/n via k = ceil((n+1)*(1-alpha)). This is the residual gap recorded
+    in TECHNICAL_NOTE.md Sec. 6, not a bug in this test."""
+    import dataclasses
+
+    scores = RNG.standard_normal(300)
+    cal = SplitConformalCalibrator.fit(scores, alpha=0.05)
+    ordered = np.sort(scores, kind="stable")
+    relabeled = dataclasses.replace(
+        cal, threshold=float(ordered[0]), order_statistic=1
+    )
+    assert relabeled.verify_sample(scores) is True
+    assert relabeled.order_statistic != cal.order_statistic
+
+
+def test_mondrian_verify_sample_delegates_per_stratum() -> None:
+    """MondrianCalibrator.verify_sample checks only the named stratum's
+    calibrator against the scores given for that stratum, and raises
+    GroupTooSmall (not a bare False) for a group that was never a question
+    fit() could answer."""
+    scores = RNG.standard_normal(400)
+    groups = RNG.integers(0, 2, size=400)
+    mond = MondrianCalibrator.fit(scores, groups, alpha=0.1)
+    assert mond.verify_sample(0, scores[groups == 0]) is True
+    assert mond.verify_sample(0, scores[groups == 1]) is False
+    with pytest.raises(GroupTooSmall):
+        mond.verify_sample("unseen-group", scores)
+
+
 def test_refuses_shift_budget_at_or_above_alpha() -> None:
     with pytest.raises(ShiftBudgetExceeded):
         robust_level(alpha=0.05, rho=0.05)

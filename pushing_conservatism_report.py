@@ -22,6 +22,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from certabstain.provenance import write_provenance_sidecar
+
 ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
 MODES = ("stick", "slide_left", "slide_right")
 
@@ -103,6 +105,10 @@ def main() -> None:
     data = build_report()
     print_table(data)
     (ARTIFACTS / "pushing_conservatism_report.json").write_text(json.dumps(data, indent=2))
+    write_provenance_sidecar(
+        ARTIFACTS / "pushing_conservatism_report.json",
+        writer="pushing_conservatism_report.py",
+    )
     print(f"\nwrote {ARTIFACTS / 'pushing_conservatism_report.json'}")
 
     try:

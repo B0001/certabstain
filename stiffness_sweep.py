@@ -38,6 +38,7 @@ from pathlib import Path
 import numpy as np
 
 from certabstain import Interval
+from certabstain.provenance import write_provenance_sidecar
 from certabstain.reference import SpringDamper2D
 
 OUT = Path(__file__).resolve().parent / "artifacts"
@@ -106,6 +107,7 @@ def main() -> None:
     OUT.mkdir(exist_ok=True)
     data = run_sweep()
     (OUT / "stiffness_sweep.json").write_text(json.dumps(data, indent=2))
+    write_provenance_sidecar(OUT / "stiffness_sweep.json", writer="stiffness_sweep.py")
     print(f"\nwrote {OUT / 'stiffness_sweep.json'}")
     try:
         import matplotlib

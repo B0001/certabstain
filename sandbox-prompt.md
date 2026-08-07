@@ -1,129 +1,160 @@
 You are working autonomously in the certabstain repo. Make aggressive, real
 progress. Do not stop to ask permission; do not stop early because you are
-unsure whether there is work left — there is, and this prompt tells you how to
-find it.
+unsure whether there is work left — this prompt tells you exactly where it is.
 
 ## The standard everything is held to
 
 This repo is evidence for a patent handoff. `PROVISIONAL_OUTLINE.md` goes to a
 registered patent attorney, who will click through every claim in `README.md`,
 `SPEC.md`, `TECHNICAL_NOTE.md` and that outline and ask: *where is the code
-that does this, and where is the artifact that shows it ran?* A claim that
-cannot survive that click-through is a liability, not a feature.
+that does this, and where is the artifact that shows it ran?*
 
-So: **a claim is only allowed to exist if a named test or a regenerable
-artifact backs it.** When you find a claim that outruns the code, you have two
-honest moves — implement the code, or narrow the claim to what is true. You
-never have a third. Do not delete the claim silently, do not soften it into
-vagueness, and do not mark something "verified" on the strength of your own
-reasoning. Reasoning is not evidence here; a passing test with a name is.
+**A claim is only allowed to exist if a named test or a regenerable artifact
+backs it.** When a claim outruns the code you have two honest moves —
+implement the code, or narrow the claim. There is never a third. Do not delete
+a claim silently, do not soften it into vagueness, and do not mark anything
+"verified" on the strength of your own reasoning. Reasoning is not evidence
+here; a passing test with a name is.
 
-**The existing hedges are load-bearing.** Several caveats in these docs read
-like over-hedging and are not — they are the difference between a true claim
-and a false one, and an audit already caught the false version. Specifically:
-the gate's "no override path exists" claim is deliberately scoped to the **API
-surface** (no supported call sequence yields an uncertified emission) and
-explicitly **not** memory isolation, because in CPython nothing stops
-in-process code from touching a private attribute. Keep that distinction
-intact everywhere it appears. Likewise, the α,β-CROWN cross-check result is
-one verifier, one machine, one run — keep that caveat, it is not an
-independent audit. If you think a hedge is excessive, leave it and write down
-why in your handoff. Removing a true hedge is the single worst outcome of this
-session.
+**The existing hedges are load-bearing.** Several caveats read like
+over-hedging and are not — an audit already caught the un-hedged versions
+being false. Do not touch: the gate's "no override path exists" claim, which
+is deliberately scoped to the **API surface** and explicitly **not** memory
+isolation; the α,β-CROWN result's "one verifier, one machine, one run"
+caveat; and the two residual gaps recorded in `TECHNICAL_NOTE.md` §6 (the
+conformal calibrators' unverifiable order statistic, and the API-surface scope
+of the `__post_init__`/sentinel guards). If you think a hedge is excessive,
+leave it and say why in your handoff. Removing a true hedge is the worst
+possible outcome of this session.
 
-## The bug pattern this codebase actually has
+## The prior phase is finished — do not redo it
 
-Five of the audit bugs fixed here were the same shape: **a guarantee enforced
-on one path and not on its sibling.** `_ref_enclosure` validated its caller's
-enclosure; `clearance_lower_bounds`, on the parallel path, did not. `ActionGate`
-took a `cover=`; `build_monitor`, the documented one-call entry point, forgot
-to pass it — so the class was safe and every real caller was not.
+A previous session fixed every caller-revocable array freeze and every
+factory-bypassable dataclass invariant, swept all four docs, and closed seven
+beads. The suite is green at 145. `bd list --status=closed` shows that work.
+Do not re-audit it and do not invent findings to look busy — if you genuinely
+find nothing in a section below, say so and move to the next one.
 
-Two consequences, both mandatory:
+One habit from that phase still applies, because it is a property of this
+codebase: **guarantees here have a way of being enforced on one path and not
+its sibling.** Before calling anything done, grep the other callers of the
+same contract, and check the documented entry point rather than only the
+class.
 
-1. Before you call any fix done, **grep every other caller of the same
-   contract** and check whether the sibling path has the same hole. A fix that
-   patches only the path you were looking at is not a fix.
-2. **Test the documented entry point, not just the class.** A test that
-   hand-builds the object bypasses exactly the path real users take, which is
-   where the bugs have actually been.
+## Target 1 — artifact provenance (the main work)
 
-## Start here — two reproduced, unfixed findings
+`artifacts/` holds the numbers the attorney will actually look at:
+`pushing_stick_report.json`, `pushing_slide_left_report.json`,
+`pushing_slide_right_report.json`, `pushing_conservatism_report.json`,
+`scaling_study.json`, `stiffness_sweep.json`, `tube_sweep.json`. They record
+`eps`, `cover_fraction`, `verdict` and similar — and **no provenance at all**:
+no commit, no Python/numpy version, no BLAS, no platform, no date.
 
-Both were confirmed real by a prior audit and neither has been addressed.
-Reproduce each one first and write the reproduction down as a failing test
-before you change any source:
+This matters because **the numbers are not environment-independent.** The three
+`pushing_*` reports were measured to differ by roughly 0.7% relative on `eps`
+(e.g. `0.0010009` vs `0.0010076`) and to move `abstention_rate` from 0.0016 to
+0.0018 between a macOS/conda-numpy host and this Linux container. So a reviewer
+who re-runs gets different numbers than the committed ones and **has no way to
+tell benign environment variance from a real regression.** That is the gap.
 
-1. **`Interval.lo` / `.hi` are caller-revocable.** `interval.py` calls
-   `setflags(write=False)` on the endpoint arrays, but the arrays own their
-   data, so a caller can do `iv.lo.setflags(write=True)` and mutate the
-   endpoints — including into an inverted `lo > hi` state that the constructor
-   would have rejected. Note that a read-only *view* whose base is itself
-   read-only cannot be re-enabled this way; that is the likely shape of the
-   fix, but verify it empirically before committing to it.
-2. **Frozen-dataclass constructors bypass `bind()` / `build()` invariants.**
-   The `@dataclass(frozen=True)` types in `reference.py` can be constructed
-   directly, skipping whatever the blessed factory enforces. Determine what
-   each factory actually checks, then decide per type whether the direct
-   constructor should validate or be made unreachable. State the reasoning.
+Note carefully: no document currently claims these are bit-reproducible, so
+nothing in the repo is false today. You are strengthening thin evidence, not
+correcting a lie. Do not introduce a reproducibility claim you cannot
+demonstrate.
 
-When those two are done, keep going: sweep for the sibling-path pattern above
-across `gate.py`, `witness2.py`, `discrepancy.py`, `tube.py`, `conformal.py`
-and `nnbound.py`, and audit the claim-to-evidence mapping in the four documents
-named at the top.
+Three constraints that decide whether this is done well:
+
+1. **Do not destroy the diff signal.** Today, a dirty `git status` on
+   `artifacts/` after a run means a value really changed. If you stamp a
+   timestamp or a hostname straight into the payload, every run dirties every
+   file and that signal is gone forever. Separate the deterministic payload
+   from the environment record — a sibling file, a segregated block excluded
+   from comparison, a hash of the payload alone; your call, but state the
+   design and why in `TECHNICAL_NOTE.md`.
+2. **You have exactly two environments to reason from**, and one of them you
+   cannot inspect: this container, and whatever produced the committed
+   numbers. n=2, and the second is a black box. Any tolerance you propose must
+   be reported as *observed across these two environments*, not as a
+   guaranteed bound. If you write a test that asserts agreement within a
+   tolerance, the tolerance's justification goes in the test's docstring, and
+   "I picked a round number that passed" is not a justification — say so
+   plainly if that is what happened.
+3. **Do not regenerate and commit the existing artifacts.** They are the
+   current evidence, produced on a machine you do not have. Overwriting them
+   with container numbers destroys evidence and silently rebases every doc
+   claim onto an unreviewed environment. The provenance of the *existing*
+   files is unrecoverable — handle that honestly (label it unknown, or
+   recommend a regeneration the human runs on the reference machine) and flag
+   the decision in your handoff rather than making it yourself.
+
+Writers to cover: `test_pushing_stick.py`, `test_pushing_slide_left.py`,
+`test_pushing_slide_right.py`, `pushing_conservatism_report.py`,
+`scaling_study.py`, `stiffness_sweep.py`, `tube_sweep.py`, and `vnnlib.py`.
+Sibling-path rule applies — a provenance helper used by six of eight writers
+is not done.
+
+## Target 2 — the fixable residual gap
+
+`TECHNICAL_NOTE.md` §6 records that `SplitConformalCalibrator.__post_init__`
+and `MondrianCalibrator.__post_init__` cannot verify `threshold` is a genuine
+order statistic, because `fit()` checks it against a raw scores array that is
+never stored on the built object. The prior session correctly declined to
+store the whole sample.
+
+Storing a **digest** of the calibration sample is the obvious middle path:
+enough to let a re-check confirm the threshold came from a real `fit()`,
+without retaining the data. Evaluate it honestly. It may not work — a digest
+proves the sample existed, not that the threshold is its k-th order statistic,
+unless you also store something order-related. If it does not close the gap,
+say exactly what it does and does not prove, and leave the gap recorded rather
+than declaring a partial fix complete. A half-closed gap described as closed is
+worse than the gap.
 
 ## Environment
 
-- `uv run --group dev pytest -q` runs the suite. It takes about three minutes
-  and must be green before you consider anything finished. The interpreter and
-  wheels are provisioned by uv; there is no other Python here.
-- `bd` is the issue tracker. **The tracker is currently empty** — that is why
-  `bd ready` returns nothing, not because the work is done. Before you write
-  code, file a bead per finding with `bd create`, claim it with
-  `bd update <id> --claim`, and close it only when the evidence exists.
-- `git log` note: branches `m7-audit-hardening` and `m7-claims-audit` are
-  **already merged into main**. There is nothing outstanding on them. Do not
-  go looking for work there.
+- `uv run --group dev pytest -q` runs the suite (~3 min). Green before done.
+  It is 145 tests now; if that number changes, update it in `README.md`, which
+  states it in two places.
+- `bd` is the tracker. File a bead per work item with `bd create` before you
+  write code, `bd update <id> --claim`, and close only when the evidence
+  exists. Prior beads are closed; `bd ready` being empty means file new ones,
+  not that you are done.
+- Do not chase `m7-audit-hardening` or `m7-claims-audit`; both are long merged.
 
-## The artifacts trap — read this before you `git checkout` anything
+## The artifacts trap — different this time
 
-Running the test suite **rewrites tracked files** under `artifacts/`
-(`pushing_stick_report.json` and the two `pushing_slide_*` reports). Those
-JSONs are bit-reproducible *within one environment* but **not across
-environments** — the values differ between this container and the host by
-roughly 0.7% relative on `eps`, from a different numpy/BLAS build. So:
-
-- A dirty `artifacts/` after a test run **in here** is expected and is not a
-  bug you found. Do not commit those diffs, and do not "fix" the code to chase
-  the host's numbers.
-- Equally, do not commit a change that makes them differ *for a real reason*
-  without saying so loudly in your handoff.
-- Also delete any `*.vnnlib.compiled` scratch files if they appear under
-  `artifacts/vnnlib/props/`.
+In the prior phase a dirty `artifacts/` was noise to ignore. **This session it
+is your subject matter**, so the rule inverts: you must know precisely why each
+file is dirty at every point. Before you finish, `git diff artifacts/` and
+account for every changed file — payload change, provenance addition, or
+environment variance. An unexplained diff in `artifacts/` is a failed session.
+Also delete any `*.vnnlib.compiled` scratch files that appear under
+`artifacts/vnnlib/props/`.
 
 ## Git policy
 
-Stage nothing behind the user's back. Do the work, get the suite green, leave
-the tree **ready to commit**, and report what you changed. Do not `git commit`,
-do not `git push`, and do not run `bd dolt push`. If you believe a commit is
-warranted, put the exact command in your handoff and let a human run it.
+Do the work, get the suite green, leave the tree **ready to commit**. Do not
+`git commit`, do not `git push`, do not `bd dolt push`. Put the exact commands
+you would run in the handoff and let a human run them.
 
 ## What to hand back
 
 **Write this to `sandbox-handoff.md` in the repo root before you finish, and
-print it as your final message too.** The file is the part that survives: this
-container is disposable and your terminal output may not be read. Overwrite
-whatever is already in that file — the durable record of *findings* is the bead
-database, not this report.
+print it as your final message.** The file is the part that survives; this
+container is disposable. Overwrite what is there.
 
-Not a summary of your effort — a report a reviewer can check:
+A report a reviewer can check, not a summary of effort:
 
-- Each finding: the reproduction, the fix, the test that now covers it, and
-  the sibling paths you grepped and cleared.
-- Every doc claim you changed, with the before and after wording and the
-  specific test or artifact that now backs it.
-- The final `uv run --group dev pytest -q` line, verbatim, pass count included.
-- Anything you concluded was **not** worth fixing, and why. This section being
-  empty means you did not look hard enough.
-- Anything you could not verify. Say so plainly. An honest "unverified" is
-  worth more here than a confident claim, because the attorney will check.
+- The provenance design, and specifically how it preserves the "dirty
+  artifacts means a real change" signal.
+- The measured cross-environment deltas, per artifact, with the numbers.
+- Any tolerance you introduced, its justification, and its honest epistemic
+  status given n=2.
+- Target 2's verdict: closed, partially closed with exactly what is and is not
+  proven, or not closed.
+- Every doc claim you changed, before and after, with the backing test.
+- The final `pytest -q` line verbatim.
+- `git diff --stat artifacts/` with a one-line reason per file.
+- What you decided **not** to do, and why. Empty means you did not look hard.
+- What you could not verify. An honest "unverified" beats a confident claim —
+  the attorney will check.
