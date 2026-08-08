@@ -31,17 +31,17 @@
       0.03
     ]
   },
-  "eps": 0.0010075556780341293,
-  "empirical_floor": 0.0004189114293719487,
-  "eps_over_floor": 2.405175909248175,
-  "cover_fraction": 0.9978324342519047,
+  "eps": 0.001000852008067238,
+  "empirical_floor": 0.0004090540733057285,
+  "eps_over_floor": 2.4467474433855534,
+  "cover_fraction": 0.9978324342519045,
   "n_leaves": 126368,
   "n_leaf_evals": 201120,
   "alpha": 0.05,
-  "abstention_rate": 0.0018,
+  "abstention_rate": 0.0016,
   "twice_alpha": 0.1,
   "verdict": {
     "meets_M6_bar": true,
-    "reason": "nominal abstention rate 0.0018 <= 2*alpha=0.1, with certified eps=0.001008 (cover 99.8%)"
+    "reason": "nominal abstention rate 0.0016 <= 2*alpha=0.1, with certified eps=0.001001 (cover 99.8%)"
   }
 }

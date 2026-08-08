@@ -1,23 +1,15 @@
 {
-  "blas": {
-    "detection method": "pkgconfig",
-    "found": true,
-    "include directory": "/opt/_internal/cpython-3.12.13/lib/python3.12/site-packages/scipy_openblas64/include",
-    "lib directory": "/opt/_internal/cpython-3.12.13/lib/python3.12/site-packages/scipy_openblas64/lib",
-    "name": "scipy-openblas",
-    "openblas configuration": "OpenBLAS 0.3.33.112.0  USE64BITINT DYNAMIC_ARCH NO_AFFINITY neoversev2 MAX_THREADS=64",
-    "pc file directory": "/project/.openblas",
-    "version": "0.3.33.112.0"
-  },
-  "git_commit": "82f3d38a45a801664437d343ed3adc0516fa6845",
-  "git_dirty": true,
-  "machine": "aarch64",
-  "numpy_version": "2.5.1",
-  "payload_blake2b": "3bedb1a1a7d58c724e1645854d72448f8ea4234f3be1b41a4f625fe433406737",
+  "blas": null,
+  "git_commit": null,
+  "git_dirty": null,
+  "machine": null,
+  "note": "reverted to pre-09984b8 bytes by human decision (bead certabstain-n7z.1, option a): TECHNICAL_NOTE.md section 4 cites these numbers. The machine that produced them is not recoverable; 09984b8 regenerated the payload in a Linux container without updating the doc. See .artifact_delta_baseline.diff.",
+  "numpy_version": null,
+  "payload_blake2b": "8f27f3da1f38b4463b6b950a888a6626a1b39428cb1661e59ff234633236ab9e",
   "payload_file": "pushing_stick_report.json",
-  "platform": "Linux-6.12.76-linuxkit-aarch64-with-glibc2.36",
-  "processor": "",
-  "python_version": "3.12.13 (main, Aug  5 2026, 15:43:08) [Clang 22.1.3 ]",
-  "timestamp_utc": "2026-08-07T11:26:09.689710+00:00",
-  "writer": "test_pushing_stick.py"
+  "platform": null,
+  "processor": null,
+  "provenance_status": "unknown_historical",
+  "python_version": null,
+  "timestamp_utc": null
 }

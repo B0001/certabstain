@@ -37,10 +37,10 @@
     "floor_samples": 300000,
     "n_leaf_evals_used": 301039,
     "n_leaves": 239599,
-    "cover_fraction": 0.9914779877290132,
-    "eps": 0.00500678438099175,
-    "empirical_floor": 0.0018396994742884316,
-    "eps_to_floor_ratio": 2.721522972075806
+    "cover_fraction": 0.9914779877290133,
+    "eps": 0.005006783693294895,
+    "empirical_floor": 0.0018397000655597136,
+    "eps_to_floor_ratio": 2.721521723581405
   },
   "monitor": {
     "alpha": 0.05,
@@ -48,11 +48,11 @@
     "n_calibration_rollouts": 999,
     "n_eval_rollouts": 2000,
     "horizon_per_rollout": 20,
-    "calibration_threshold": -0.014849377689467168,
+    "calibration_threshold": -0.014849378875324285,
     "measured_abstention_rate": 0.0565
   },
   "h_next_sample_stats": {
-    "min": 0.007338267626259415,
+    "min": 0.007338267626259408,
     "max": 0.039999799800521645,
     "mean": 0.025262893459912117
   },

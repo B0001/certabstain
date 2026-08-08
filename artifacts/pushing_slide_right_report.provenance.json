@@ -1,0 +1,15 @@
+{
+  "blas": null,
+  "git_commit": null,
+  "git_dirty": null,
+  "machine": null,
+  "note": "backfilled for bytes committed before provenance tracking existed. Payload kept at its committed baseline per the human decision on bead certabstain-n7z.1 (option a, revert): a local pytest run regenerated it with last-digit float noise and that regeneration was discarded. The machine that produced these bytes is not recoverable.",
+  "numpy_version": null,
+  "payload_blake2b": "93b06a1cea601ddfdd5468c9eaa711360d878fa3a8f2620a5427142775ca4730",
+  "payload_file": "pushing_slide_right_report.json",
+  "platform": null,
+  "processor": null,
+  "provenance_status": "unknown_historical",
+  "python_version": null,
+  "timestamp_utc": null
+}
