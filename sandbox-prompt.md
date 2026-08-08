@@ -139,9 +139,9 @@ you would run in the handoff and let a human run them.
 
 ## What to hand back
 
-**Write this to `sandbox-handoff.md` in the repo root before you finish, and
-print it as your final message.** The file is the part that survives; this
-container is disposable. Overwrite what is there.
+**Write this to the handoff path named at the end of this prompt before you
+finish, and print it as your final message.** The file is the part that
+survives; this container is disposable.
 
 A report a reviewer can check, not a summary of effort:
 
