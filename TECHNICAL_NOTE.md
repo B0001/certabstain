@@ -326,7 +326,11 @@ The three per-mode pushing reports are written as a side effect of running
 their respective test modules under pytest (each ends by dumping its own
 report JSON), not by standalone scripts; `pushing_conservatism_report.py`
 then only reads and consolidates those three files — run the tests first if
-regenerating from scratch.
+regenerating from scratch. `test_pushing_conservatism.py` asserts, field by
+field, that the committed `pushing_conservatism_report.json` still matches a
+fresh consolidation of the three currently-committed per-mode reports, so a
+per-mode report regenerated (or reverted) without re-running the consolidator
+fails the suite instead of leaving a silently stale summary.
 
 Every number in §3 and §4 above was re-derived from these artifacts, and each
 artifact re-derived from the script or test named here, as a check on this
@@ -341,6 +345,94 @@ hand) until `test_pushing_slide_right.py` gained the same report-dumping step
 its two siblings already had. Regenerating it reproduced every substantive
 field exactly, so §4's table is unchanged — but the provenance now matches
 what the paragraph above claims for it.
+
+### Provenance sidecars and cross-environment variance
+
+None of the numbers above are claimed to be bit-reproducible across machines,
+and re-running the writers confirms why: `certabstain.provenance` attaches a
+sibling `<payload-stem>.provenance.json` file (git commit, `git status`
+dirtiness, Python/NumPy/BLAS versions, `platform.platform()`, a BLAKE2b-256
+hash of the payload bytes, UTC timestamp) next to every artifact the eight
+writers listed in this section produce — `test_pushing_stick.py`,
+`test_pushing_slide_left.py`, `test_pushing_slide_right.py`,
+`pushing_conservatism_report.py`, `scaling_study.py`, `stiffness_sweep.py`,
+`tube_sweep.py`, and `vnnlib.generate_artifact_set`. The sidecar is a
+*separate* file, and the payload JSON never gains a provenance key, for one
+reason: `git status` on `artifacts/` is this repo's signal that a cited
+number actually changed, and every doc claim above trusts that signal.
+Stamping a timestamp or hostname into the payload dict would make every
+routine re-run dirty every payload file forever and destroy it. Writing is
+also opt-in — `CERTABSTAIN_WRITE_ARTIFACTS=1` (`provenance.artifact_writes_enabled()`)
+— so a plain `pytest -q` or `python <script>.py` computes and asserts against
+the committed bytes without overwriting them; this is what stops the
+regenerate-and-silently-commit failure mode described below from recurring.
+`vnnlib.generate_artifact_set` is deliberately left ungated: it takes its
+output directory as an explicit parameter and both current callers
+(`test_nnbound.py::test_artifact_set_generation`, the `run-certabstain`
+skill's `cmd_artifacts`) already pass a scratch/temp directory, never the
+committed `artifacts/vnnlib/` path, so there is nothing for a gate to protect
+there today.
+
+That opt-in gate exists because the failure already happened once. Commit
+`09984b8` ran the suite in this container without the gate (which did not
+exist yet) and silently committed container-produced bytes for
+`pushing_stick_report.json` and `pushing_slide_left_report.json` over
+whatever machine had produced the previously-committed values, leaving
+`TECHNICAL_NOTE.md`'s §4 table citing numbers that no longer matched HEAD. A
+human reviewing the two candidate baselines chose to revert both files to
+their pre-`09984b8` bytes (the same bytes `TECHNICAL_NOTE.md` §4 already
+cited) rather than accept the container's numbers as the new baseline, since
+the container is not the reference machine this evidence is meant to be
+checked against. `pushing_conservatism_report.json` — which only reads and
+consolidates the three per-mode reports (see the paragraph above) — was left
+untouched by that revert since it already matched the restored baseline, and
+`test_pushing_conservatism.py` asserts field-by-field that it still does.
+
+The pre-`09984b8` bytes were themselves produced on a machine this project
+has no record of (not this container), so their provenance is honestly
+unrecoverable rather than reconstructed. `pushing_stick_report.provenance.json`,
+`pushing_slide_left_report.provenance.json`, and
+`pushing_slide_right_report.provenance.json` are therefore backfilled via
+`provenance.write_unknown_provenance_sidecar`: every environment field is
+`null` and `provenance_status` is `"unknown_historical"`. Only
+`payload_blake2b` is real (hashed from the committed bytes), so a later,
+properly-collected sidecar for a re-generated version of the same artifact
+can still be compared against these for a byte-identity check even though
+nothing here says what produced the originals.
+
+The revert commit's diff against the container's regenerated values (saved
+at `.artifact_delta_baseline.diff`) is the only cross-environment data point
+this project has — n=2 (this container vs. one unidentified machine), and
+the second point is a black box whose Python/NumPy/BLAS/OS this repo cannot
+inspect. Reported as *observed*, not as a bound:
+
+| artifact | field | pre-`09984b8` (cited by §4) | this container (`09984b8`) | relative delta |
+|---|---|---|---|---|
+| `pushing_stick_report.json` | `eps` | 0.0010008520080672380 | 0.0010075556780341293 | ≈ 0.67% |
+| `pushing_stick_report.json` | `abstention_rate` | 0.0016 | 0.0018 | ≈ 12.5% (0.0016 → 0.0018, i.e. one more abstention in 5,000 nominal rollouts) |
+| `pushing_slide_left_report.json` | `eps` | 0.0050067836932948950 | 0.0050067843809917500 | ≈ 1.4×10⁻⁵ % |
+| `pushing_slide_right_report.json` | `eps` | 0.0029466023375540056 | 0.0029466023375539430 | ≈ 2×10⁻¹² % |
+
+The stick mode's ~0.67% `eps` shift and its abstention-rate move are large
+enough to change the third significant digit reported in §4's table (0.001001
+vs. 0.001008) and would have changed the doc's "2.45×" eps/floor-ratio prose
+to "2.41×" had the container's numbers been accepted instead of reverted —
+this is the delta that made `09984b8`'s silent regeneration user-visible in
+the first place. The slide_left and slide_right deltas, by contrast, are at
+the level of last-digit floating-point noise (10⁻⁵–10⁻¹² % relative) and are
+not distinguishable from summation-order nondeterminism on a single machine
+run twice. Nothing here says which of these two effects — genuine
+platform/BLAS-driven divergence for stick, or float-noise for the slide
+modes — is the general rule; **n=2 is not enough to separate "this pair of
+machines differs by up to ~0.7% on this one workload" from "some
+BLAS/threading paths are more numerically sensitive than others,"** and no
+claim in this document should be read as asserting either. The practical
+consequence for a reviewer: a re-run producing `eps`/`abstention_rate` values
+within roughly the deltas tabulated above is consistent with benign
+cross-environment variance; a re-run producing a materially larger change,
+or a change in `verdict.meets_M6_bar`, is not something this note's
+provenance design explains away and should be treated as a possible
+regression.
 
 `artifacts/vnnlib/` holds a separate, independent cross-check: VNNLIB/ONNX
 instances generated by `certabstain.vnnlib.generate_artifact_set`, pairing

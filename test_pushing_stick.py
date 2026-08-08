@@ -46,7 +46,7 @@ from certabstain import (
 )
 from certabstain.discrepancy import MODE_IN, MODE_OUT, MODE_STRADDLE
 from certabstain.nnbound import fit_mlp
-from certabstain.provenance import write_provenance_sidecar
+from certabstain.provenance import artifact_writes_enabled, write_provenance_sidecar
 
 # Mode-boundary recon (verified numerically, see task notes): this box lies
 # ~99.8% inside the stick mode for PusherSlider() defaults.
@@ -330,11 +330,20 @@ def test_write_report_artifact(net_and_cert) -> None:
     }
 
     out_dir = os.path.join(os.path.dirname(__file__), "artifacts")
-    os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, "pushing_stick_report.json")
-    with open(out_path, "w") as f:
-        json.dump(report, f, indent=2)
-    write_provenance_sidecar(out_path, writer="test_pushing_stick.py")
+    if artifact_writes_enabled():
+        os.makedirs(out_dir, exist_ok=True)
+        with open(out_path, "w") as f:
+            json.dump(report, f, indent=2)
+        write_provenance_sidecar(out_path, writer="test_pushing_stick.py")
+    else:
+        print(
+            f"\n[artifacts] CERTABSTAIN_WRITE_ARTIFACTS not set; leaving "
+            f"{out_path} as committed"
+        )
 
-    assert os.path.exists(out_path)
+    assert os.path.exists(out_path), (
+        f"{out_path} is missing and CERTABSTAIN_WRITE_ARTIFACTS=1 was not set "
+        "to generate it"
+    )
     assert meets_bar, report["verdict"]["reason"]

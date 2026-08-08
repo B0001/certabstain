@@ -38,7 +38,7 @@ from pathlib import Path
 import numpy as np
 
 from certabstain import Interval
-from certabstain.provenance import write_provenance_sidecar
+from certabstain.provenance import artifact_writes_enabled, write_provenance_sidecar
 from certabstain.reference import SpringDamper2D
 
 OUT = Path(__file__).resolve().parent / "artifacts"
@@ -104,8 +104,16 @@ def run_sweep() -> dict:
 
 
 def main() -> None:
-    OUT.mkdir(exist_ok=True)
     data = run_sweep()
+
+    if not artifact_writes_enabled():
+        print(
+            "\n[artifacts] CERTABSTAIN_WRITE_ARTIFACTS not set; not writing "
+            f"{OUT / 'stiffness_sweep.json'} (leaving committed bytes as-is)"
+        )
+        return
+
+    OUT.mkdir(exist_ok=True)
     (OUT / "stiffness_sweep.json").write_text(json.dumps(data, indent=2))
     write_provenance_sidecar(OUT / "stiffness_sweep.json", writer="stiffness_sweep.py")
     print(f"\nwrote {OUT / 'stiffness_sweep.json'}")

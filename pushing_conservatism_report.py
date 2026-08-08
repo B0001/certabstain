@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from certabstain.provenance import write_provenance_sidecar
+from certabstain.provenance import artifact_writes_enabled, write_provenance_sidecar
 
 ARTIFACTS = Path(__file__).resolve().parent / "artifacts"
 MODES = ("stick", "slide_left", "slide_right")
@@ -101,9 +101,18 @@ def print_table(data: dict) -> None:
 
 
 def main() -> None:
-    ARTIFACTS.mkdir(exist_ok=True)
     data = build_report()
     print_table(data)
+
+    if not artifact_writes_enabled():
+        print(
+            "\n[artifacts] CERTABSTAIN_WRITE_ARTIFACTS not set; not writing "
+            f"{ARTIFACTS / 'pushing_conservatism_report.json'} (leaving committed "
+            "bytes as-is)"
+        )
+        return
+
+    ARTIFACTS.mkdir(exist_ok=True)
     (ARTIFACTS / "pushing_conservatism_report.json").write_text(json.dumps(data, indent=2))
     write_provenance_sidecar(
         ARTIFACTS / "pushing_conservatism_report.json",

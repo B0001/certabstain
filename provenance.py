@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -34,12 +35,31 @@ from typing import Any
 import numpy as np
 
 __all__ = [
+    "ARTIFACT_WRITE_ENV_VAR",
+    "artifact_writes_enabled",
     "collect_environment",
     "write_provenance_sidecar",
     "write_unknown_provenance_sidecar",
 ]
 
 _REPO_ROOT = Path(__file__).resolve().parent
+
+ARTIFACT_WRITE_ENV_VAR = "CERTABSTAIN_WRITE_ARTIFACTS"
+
+
+def artifact_writes_enabled() -> bool:
+    """Opt-in gate for regenerating the committed files under ``artifacts/``.
+
+    Every writer that targets a committed artifact path (as opposed to a
+    caller-supplied scratch/temp directory, e.g. ``vnnlib.generate_artifact_set``
+    invoked with ``tmp_path`` or a ``TemporaryDirectory``) must check this
+    before opening the file for write. Default is *disabled*, so a plain
+    ``uv run --group dev pytest -q`` -- or a plain ``python <writer>.py`` --
+    computes and asserts against the same values without overwriting the
+    committed evidence with whatever the current machine produces. Set
+    ``CERTABSTAIN_WRITE_ARTIFACTS=1`` to opt in and regenerate.
+    """
+    return os.environ.get(ARTIFACT_WRITE_ENV_VAR) == "1"
 
 
 def _git_commit() -> str | None:

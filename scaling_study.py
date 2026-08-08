@@ -35,7 +35,7 @@ import numpy as np
 from certabstain import Interval, MLP, propagate_tube
 from certabstain.discrepancy import _batched_ibp, certify_epsilon
 from certabstain.nnbound import fit_mlp
-from certabstain.provenance import write_provenance_sidecar
+from certabstain.provenance import artifact_writes_enabled, write_provenance_sidecar
 from certabstain.reference import SpringDamper2D
 
 OUT = Path(__file__).resolve().parent / "artifacts"
@@ -181,8 +181,6 @@ def horizon_scaling(k_max: int = 40) -> dict:
 
 
 def main() -> None:
-    OUT.mkdir(exist_ok=True)
-
     print("=== Part A: input-dimension scaling ===")
     dim_rows = dimension_scaling()
 
@@ -190,6 +188,15 @@ def main() -> None:
     horizon_row = horizon_scaling()
 
     data = {"dimension_scaling": dim_rows, "horizon_scaling": horizon_row}
+
+    if not artifact_writes_enabled():
+        print(
+            "\n[artifacts] CERTABSTAIN_WRITE_ARTIFACTS not set; not writing "
+            f"{OUT / 'scaling_study.json'} (leaving committed bytes as-is)"
+        )
+        return
+
+    OUT.mkdir(exist_ok=True)
     (OUT / "scaling_study.json").write_text(json.dumps(data, indent=2))
     write_provenance_sidecar(OUT / "scaling_study.json", writer="scaling_study.py")
     print(f"\nwrote {OUT / 'scaling_study.json'}")

@@ -35,7 +35,7 @@ import numpy as np
 from certabstain import Interval, propagate_tube
 from certabstain.discrepancy import certify_epsilon
 from certabstain.nnbound import MLP, fit_mlp
-from certabstain.provenance import write_provenance_sidecar
+from certabstain.provenance import artifact_writes_enabled, write_provenance_sidecar
 from certabstain.reference import SpringDamper2D
 
 OUT = Path(__file__).resolve().parent / "artifacts"
@@ -146,11 +146,7 @@ def run_sweep() -> dict:
 
 
 def main() -> None:
-    OUT.mkdir(exist_ok=True)
     data = run_sweep()
-    (OUT / "tube_sweep.json").write_text(json.dumps(data, indent=2))
-    write_provenance_sidecar(OUT / "tube_sweep.json", writer="tube_sweep.py")
-    print(f"\nwrote {OUT / 'tube_sweep.json'}")
 
     n_killed = sum(r["kill_by_5"] for r in data["rows"])
     if n_killed:
@@ -161,6 +157,18 @@ def main() -> None:
             f"proceeding to M5, rather than proceeding on a tube that has already "
             f"gone vacuous at the low-stiffness end."
         )
+
+    if not artifact_writes_enabled():
+        print(
+            "\n[artifacts] CERTABSTAIN_WRITE_ARTIFACTS not set; not writing "
+            f"{OUT / 'tube_sweep.json'} (leaving committed bytes as-is)"
+        )
+        return
+
+    OUT.mkdir(exist_ok=True)
+    (OUT / "tube_sweep.json").write_text(json.dumps(data, indent=2))
+    write_provenance_sidecar(OUT / "tube_sweep.json", writer="tube_sweep.py")
+    print(f"\nwrote {OUT / 'tube_sweep.json'}")
 
     try:
         import matplotlib
